@@ -3,12 +3,12 @@ const state = {
   groundStation: null,
   units: 'imperial',
   fadeMargin: 10,
-  videoPreset: 'walksnail_gtpro_700',
-  videoAirAntenna: 'stock_dipole',
-  videoAntenna: 'stock',
-  controlPreset: 'elrs_gemini_50',
-  controlAirAntenna: 'stock_dipole',
-  controlAntenna: 'stock',
+  videoPreset: '',
+  videoAirAntenna: '',
+  videoAntenna: '',
+  controlPreset: '',
+  controlAirAntenna: '',
+  controlAntenna: '',
   customVideoPreset: null,
   customVideoAirAntenna: null,
   customVideoAntenna: null,
@@ -146,6 +146,14 @@ function initPanelToggle() {
  */
 function buildHashState() {
   var s = Object.assign({}, state, { zoom: map ? map.getZoom() : 12 });
+
+  // Don't encode blank/unset dropdown fields
+  if (!s.videoPreset)       delete s.videoPreset;
+  if (!s.videoAirAntenna)   delete s.videoAirAntenna;
+  if (!s.videoAntenna)      delete s.videoAntenna;
+  if (!s.controlPreset)     delete s.controlPreset;
+  if (!s.controlAirAntenna) delete s.controlAirAntenna;
+  if (!s.controlAntenna)    delete s.controlAntenna;
 
   if (s.videoPreset === 'custom' && s.customVideoPreset) {
     var cv = s.customVideoPreset;
@@ -452,7 +460,7 @@ function validateAndFixState() {
 
   for (var field in lookups) {
     var val = state[field];
-    if (val !== 'custom' && !lookups[field][val]) {
+    if (val !== 'custom' && val !== '' && !lookups[field][val]) {
       state[field] = defaults[field];
       hadBadRef = true;
     }
@@ -465,12 +473,24 @@ function validateAndFixState() {
 
 function populateDropdown(selectEl, data) {
   selectEl.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value    = '';
+  placeholder.disabled = true;
+  placeholder.textContent = '-- Select --';
+  selectEl.appendChild(placeholder);
   for (const [key, item] of Object.entries(data)) {
     const option = document.createElement('option');
     option.value = key;
     option.textContent = item.name;
     selectEl.appendChild(option);
   }
+}
+
+function updateSaveProfileBtn() {
+  var ready = state.videoPreset && state.videoAirAntenna && state.videoAntenna &&
+              state.controlPreset && state.controlAirAntenna && state.controlAntenna;
+  var btn = document.getElementById('saveProfileBtn');
+  if (btn) btn.disabled = !ready;
 }
 
 // ── Apply state to UI ─────────────────────────────────────────────────────────
@@ -598,11 +618,9 @@ function locateUser(btnEl) {
 // ── Map ───────────────────────────────────────────────────────────────────────
 
 function initMap() {
-  const defaultLocation = [46.551, 7.962];
-
   map = L.map('map', {
     zoomControl: false
-  }).setView(defaultLocation, 12);
+  }).setView([20, 0], 2);
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -656,6 +674,8 @@ function initMap() {
 // ── Calculate ─────────────────────────────────────────────────────────────────
 
 function recalculate() {
+  updateSaveProfileBtn();
+
   const vLink   = state.videoPreset       === 'custom' ? state.customVideoPreset       : videoPresets[state.videoPreset];
   const vAirAnt = state.videoAirAntenna   === 'custom' ? state.customVideoAirAntenna   : videoAirAntennas[state.videoAirAntenna];
   const vAnt    = state.videoAntenna      === 'custom' ? state.customVideoAntenna      : videoAntennas[state.videoAntenna];
@@ -808,7 +828,6 @@ function escapeHtml(str) {
 
 function populateProfileDropdown() {
   var sel       = document.getElementById('profileSelect');
-  var loadBtn   = document.getElementById('loadProfileBtn');
   var deleteBtn = document.getElementById('deleteProfileBtn');
   var names     = Object.keys(profilesData).sort();
 
@@ -827,7 +846,6 @@ function populateProfileDropdown() {
     sel.appendChild(opt);
   });
 
-  loadBtn.disabled   = !sel.value;
   deleteBtn.disabled = !sel.value;
 }
 
@@ -868,7 +886,6 @@ function saveProfile(name) {
   saveProfiles(profilesData);
   populateProfileDropdown();
   document.getElementById('profileSelect').value = name;
-  document.getElementById('loadProfileBtn').disabled   = false;
   document.getElementById('deleteProfileBtn').disabled = false;
 }
 
@@ -883,15 +900,10 @@ function initProfiles() {
   populateProfileDropdown();
 
   var sel       = document.getElementById('profileSelect');
-  var loadBtn   = document.getElementById('loadProfileBtn');
   var deleteBtn = document.getElementById('deleteProfileBtn');
 
   sel.addEventListener('change', function() {
-    loadBtn.disabled   = !sel.value;
     deleteBtn.disabled = !sel.value;
-  });
-
-  loadBtn.addEventListener('click', function() {
     if (sel.value && profilesData[sel.value]) loadProfile(sel.value);
   });
 
@@ -954,15 +966,36 @@ function renderRecentLocations() {
   }
 
   recentLocations.forEach(function(loc) {
-    var btn   = document.createElement('button');
-    btn.className   = 'location-item';
-    btn.textContent = loc.label || (loc.lat.toFixed(4) + ', ' + loc.lng.toFixed(4));
-    btn.addEventListener('click', function() {
+    var label = loc.label || (loc.lat.toFixed(4) + ', ' + loc.lng.toFixed(4));
+
+    var item = document.createElement('div');
+    item.className = 'location-item';
+
+    var pinBtn = document.createElement('button');
+    pinBtn.className   = 'location-pin-btn';
+    pinBtn.textContent = label;
+    pinBtn.addEventListener('click', function() {
       restoreGroundStation(loc.lat, loc.lng, 14);
       recalculate();
       fitMapToCircles();
     });
-    list.appendChild(btn);
+
+    var delBtn = document.createElement('button');
+    delBtn.className = 'location-delete-btn';
+    delBtn.setAttribute('aria-label', 'Delete location');
+    delBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    delBtn.addEventListener('click', function() {
+      var idx = recentLocations.indexOf(loc);
+      if (idx !== -1) {
+        recentLocations.splice(idx, 1);
+        saveRecentLocations(recentLocations);
+        renderRecentLocations();
+      }
+    });
+
+    item.appendChild(pinBtn);
+    item.appendChild(delBtn);
+    list.appendChild(item);
   });
 }
 
@@ -1070,6 +1103,13 @@ function initDataActions() {
       e.target.value = '';
     }
   });
+
+  var mobileExportBtn = document.getElementById('mobileExportBtn');
+  var mobileImportBtn = document.getElementById('mobileImportBtn');
+  if (mobileExportBtn) mobileExportBtn.addEventListener('click', exportData);
+  if (mobileImportBtn) mobileImportBtn.addEventListener('click', function() {
+    importInput.click();
+  });
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -1113,4 +1153,19 @@ document.addEventListener('DOMContentLoaded', () => {
   initDataActions();
 
   recalculate();
+  autoLocate();
 });
+
+function autoLocate() {
+  if (state.groundStation || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      // Only move the map if the user hasn't pinned a location while we were waiting
+      if (!state.groundStation) {
+        map.setView([pos.coords.latitude, pos.coords.longitude], 13);
+      }
+    },
+    function() { /* permission denied or unavailable — world view stays */ },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+  );
+}

@@ -587,23 +587,62 @@ footer {
 }
 
 .location-item {
+  display: flex;
+  align-items: stretch;
   width: 100%;
-  padding: 8px 12px;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--panel-border);
   border-radius: 8px;
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.location-item:hover,
+.location-item:focus-within {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.location-pin-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  background: none;
+  border: none;
   color: var(--text-main);
   font-family: inherit;
   font-size: 13px;
   cursor: pointer;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.location-pin-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px 0 0 6px;
+}
+
+.location-delete-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  cursor: pointer;
   transition: var(--transition);
 }
 
-.location-item:hover,
-.location-item:focus-visible {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.2);
+.location-delete-btn:hover,
+.location-delete-btn:focus-visible {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
   outline: none;
 }
 
@@ -959,7 +998,7 @@ footer {
   }
 
   .ui-panel.collapsed {
-    height: 120px;
+    height: 132px;
   }
 
   .panel-body {
@@ -975,11 +1014,11 @@ footer {
     top: 20px;
   }
 
-  /* Panel header: mobile reveal */
+  /* Panel header: mobile reveal — stacked vertically (toggle above, action bar below) */
   .panel-header {
     display: flex;
+    flex-direction: column;
     flex-shrink: 0;
-    position: relative;
   }
 
   /* Full-width tap + drag target */
@@ -1059,56 +1098,44 @@ footer {
     flex-shrink: 0;
   }
 
-  /* Mobile share button — left of the locate button */
-  .mobile-share-btn {
-    position: absolute;
-    right: 58px;
-    top: 13px;
+  /* Mobile action bar — sits below the peek row, phone-app tab-bar style */
+  .mobile-action-bar {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.2s ease;
+    border-top: 1px solid var(--panel-border);
   }
 
-  .mobile-share-btn:hover,
-  .mobile-share-btn:focus-visible {
-    color: var(--accent);
-    border-color: var(--accent);
+  .mobile-action-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 5px 4px 6px;
+    background: none;
+    border: none;
+    border-right: 1px solid var(--panel-border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    transition: var(--transition);
+  }
+
+  .mobile-action-btn:last-child {
+    border-right: none;
+  }
+
+  .mobile-action-btn:hover,
+  .mobile-action-btn:focus-visible {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.06);
     outline: none;
   }
 
-  /* Mobile locate button — positioned over the peek title row */
-  .mobile-locate-btn {
-    position: absolute;
-    right: 16px;
-    top: 13px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .mobile-locate-btn:hover,
-  .mobile-locate-btn:focus-visible {
-    color: var(--accent);
-    border-color: var(--accent);
-    outline: none;
-  }
-
+  /* Locate button state classes (added/removed by locateUser()) */
   .mobile-locate-btn.locating {
     color: var(--accent);
     animation: spin 1s linear infinite;
@@ -1116,12 +1143,15 @@ footer {
 
   .mobile-locate-btn.locate-success {
     color: #34d399;
-    border-color: #34d399;
   }
 
   .mobile-locate-btn.locate-error {
     color: #f87171;
-    border-color: #f87171;
+  }
+
+  /* Footer export/import buttons are redundant on mobile — action bar covers them */
+  .data-actions {
+    display: none;
   }
 
   /* Hide redundant title when panel is expanded on mobile */
