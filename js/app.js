@@ -204,7 +204,7 @@ function expandCustomFromHash(decoded) {
       decoded[customKeyMap[field]] = { txPowerDbm: txPow, frequencyHz: freqMh * 1e6, rxSensitivityDbm: rxSens };
       decoded[field] = 'custom';
     } else {
-      delete decoded[field]; // malformed — fall through to defaults
+      delete decoded[field]; // malformed -- fall through to defaults
     }
   });
 
@@ -247,7 +247,7 @@ function handleShare() {
   var url = window.location.href;
   // Use native share sheet only on touch devices; desktop always copies to clipboard.
   if (navigator.maxTouchPoints > 0 && navigator.share) {
-    navigator.share({ title: 'FPV Link Budget — my setup', url: url })
+    navigator.share({ title: 'FPV Link Budget -- my setup', url: url })
       .catch(function() { copyUrlToClipboard(url); });
     return;
   }
@@ -649,6 +649,7 @@ function initMap() {
 
     recalculate();
     fitMapToCircles();
+    offerSaveLocation(e.latlng.lat, e.latlng.lng);
   });
 }
 
@@ -708,6 +709,7 @@ function recalculate() {
   }
 
   updateHash();
+  saveLastState(state);
 }
 
 function fitMapToCircles() {
@@ -723,6 +725,353 @@ function initMobileLocate() {
   btn.addEventListener('click', () => locateUser(btn));
 }
 
+// ── Ground station restore helper ─────────────────────────────────────────────
+
+function restoreGroundStation(lat, lng, zoom) {
+  var latlng = L.latLng(lat, lng);
+  state.groundStation = latlng;
+  if (!groundMarker) {
+    groundMarker = L.circleMarker(latlng, {
+      radius: 6, color: '#fff', weight: 2,
+      fillColor: '#3b82f6', fillOpacity: 1
+    }).addTo(map);
+  } else {
+    groundMarker.setLatLng(latlng);
+  }
+  els.mapHint.classList.add('hidden');
+  els.mapHint.setAttribute('aria-hidden', 'true');
+  map.setView(latlng, zoom || 12);
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+
+var _modalCleanup = null;
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('visible');
+  if (_modalCleanup) { _modalCleanup(); _modalCleanup = null; }
+}
+
+/**
+ * Shows the shared modal dialog.
+ * onConfirm(inputValue) is called when the user confirms.
+ * Return false from onConfirm to keep the modal open (e.g. validation failed).
+ */
+function showModal(title, bodyHtml, confirmLabel, onConfirm, isDanger) {
+  var overlay    = document.getElementById('modalOverlay');
+  var titleEl    = document.getElementById('modalTitle');
+  var bodyEl     = document.getElementById('modalBody');
+  var confirmBtn = document.getElementById('modalConfirm');
+  var cancelBtn  = document.getElementById('modalCancel');
+
+  titleEl.textContent    = title;
+  bodyEl.innerHTML       = bodyHtml;
+  confirmBtn.textContent = confirmLabel || 'Confirm';
+  confirmBtn.className   = isDanger ? 'btn btn-danger' : 'btn btn-primary';
+  overlay.classList.add('visible');
+
+  var input = bodyEl.querySelector('input[type="text"]');
+  if (input) setTimeout(function() { input.focus(); }, 50);
+
+  function onConfirmClick() {
+    var val = input ? input.value.trim() : '';
+    var ok = onConfirm(val);
+    if (ok !== false) closeModal();
+  }
+  function onCancelClick() { closeModal(); }
+  function onKeyDown(e) {
+    if (e.key === 'Escape') onCancelClick();
+    if (e.key === 'Enter' && input) onConfirmClick();
+  }
+  function onOverlayClick(e) { if (e.target === overlay) onCancelClick(); }
+
+  confirmBtn.addEventListener('click', onConfirmClick);
+  cancelBtn.addEventListener('click', onCancelClick);
+  document.addEventListener('keydown', onKeyDown);
+  overlay.addEventListener('click', onOverlayClick);
+
+  _modalCleanup = function() {
+    confirmBtn.removeEventListener('click', onConfirmClick);
+    cancelBtn.removeEventListener('click', onCancelClick);
+    document.removeEventListener('keydown', onKeyDown);
+    overlay.removeEventListener('click', onOverlayClick);
+  };
+}
+
+// ── Profiles ──────────────────────────────────────────────────────────────────
+
+var profilesData = {};
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function populateProfileDropdown() {
+  var sel       = document.getElementById('profileSelect');
+  var loadBtn   = document.getElementById('loadProfileBtn');
+  var deleteBtn = document.getElementById('deleteProfileBtn');
+  var names     = Object.keys(profilesData).sort();
+
+  sel.innerHTML = '';
+  var placeholder = document.createElement('option');
+  placeholder.value    = '';
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  placeholder.textContent = names.length === 0 ? 'No saved profiles' : '-- Select a profile --';
+  sel.appendChild(placeholder);
+
+  names.forEach(function(name) {
+    var opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+
+  loadBtn.disabled   = !sel.value;
+  deleteBtn.disabled = !sel.value;
+}
+
+function loadProfile(name) {
+  var profile = profilesData[name];
+  if (!profile) return;
+  var fields = ['videoPreset','videoAirAntenna','videoAntenna',
+                'controlPreset','controlAirAntenna','controlAntenna',
+                'fadeMargin','units',
+                'customVideoPreset','customVideoAirAntenna','customVideoAntenna',
+                'customControlPreset','customControlAirAntenna','customControlAntenna'];
+  fields.forEach(function(f) {
+    if (profile[f] !== undefined) state[f] = profile[f];
+  });
+  applyStateToUI();
+  recalculate();
+  showToast('Profile "' + name + '" loaded.');
+}
+
+function saveProfile(name) {
+  profilesData[name] = {
+    videoPreset:             state.videoPreset,
+    videoAirAntenna:         state.videoAirAntenna,
+    videoAntenna:            state.videoAntenna,
+    controlPreset:           state.controlPreset,
+    controlAirAntenna:       state.controlAirAntenna,
+    controlAntenna:          state.controlAntenna,
+    fadeMargin:              state.fadeMargin,
+    units:                   state.units,
+    customVideoPreset:       state.customVideoPreset,
+    customVideoAirAntenna:   state.customVideoAirAntenna,
+    customVideoAntenna:      state.customVideoAntenna,
+    customControlPreset:     state.customControlPreset,
+    customControlAirAntenna: state.customControlAirAntenna,
+    customControlAntenna:    state.customControlAntenna,
+    createdAt:               Date.now(),
+  };
+  saveProfiles(profilesData);
+  populateProfileDropdown();
+  document.getElementById('profileSelect').value = name;
+  document.getElementById('loadProfileBtn').disabled   = false;
+  document.getElementById('deleteProfileBtn').disabled = false;
+}
+
+function deleteProfile(name) {
+  delete profilesData[name];
+  saveProfiles(profilesData);
+  populateProfileDropdown();
+}
+
+function initProfiles() {
+  profilesData = loadProfiles();
+  populateProfileDropdown();
+
+  var sel       = document.getElementById('profileSelect');
+  var loadBtn   = document.getElementById('loadProfileBtn');
+  var deleteBtn = document.getElementById('deleteProfileBtn');
+
+  sel.addEventListener('change', function() {
+    loadBtn.disabled   = !sel.value;
+    deleteBtn.disabled = !sel.value;
+  });
+
+  loadBtn.addEventListener('click', function() {
+    if (sel.value && profilesData[sel.value]) loadProfile(sel.value);
+  });
+
+  document.getElementById('saveProfileBtn').addEventListener('click', function() {
+    showModal(
+      'Save Profile',
+      '<label class="modal-label">Profile name</label>' +
+      '<input type="text" class="modal-input" placeholder="e.g. Skyhunter LR" maxlength="50">' +
+      '<span class="modal-error"></span>',
+      'Save',
+      function(name) {
+        var err = document.querySelector('#modalBody .modal-error');
+        if (!name) { if (err) err.textContent = 'Enter a profile name.'; return false; }
+        if (profilesData[name]) { if (err) err.textContent = '"' + name + '" already exists.'; return false; }
+        saveProfile(name);
+        showToast('Profile "' + name + '" saved.');
+      }
+    );
+  });
+
+  deleteBtn.addEventListener('click', function() {
+    var name = sel.value;
+    if (!name || !profilesData[name]) return;
+    showModal(
+      'Delete Profile',
+      '<p class="modal-message">Delete "<strong>' + escapeHtml(name) + '</strong>"? This cannot be undone.</p>',
+      'Delete',
+      function() { deleteProfile(name); showToast('Profile deleted.'); },
+      true
+    );
+  });
+}
+
+// ── Recent locations ──────────────────────────────────────────────────────────
+
+var recentLocations = [];
+
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  var R    = 6371000;
+  var toRad = function(d) { return d * Math.PI / 180; };
+  var dLat = toRad(lat2 - lat1);
+  var dLng = toRad(lng2 - lng1);
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+          Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function renderRecentLocations() {
+  var list = document.getElementById('recentLocationsList');
+  if (!list) return;
+  list.innerHTML = '';
+
+  if (recentLocations.length === 0) {
+    var empty = document.createElement('p');
+    empty.className = 'locations-empty';
+    empty.textContent = 'No saved locations yet.';
+    list.appendChild(empty);
+    return;
+  }
+
+  recentLocations.forEach(function(loc) {
+    var btn   = document.createElement('button');
+    btn.className   = 'location-item';
+    btn.textContent = loc.label || (loc.lat.toFixed(4) + ', ' + loc.lng.toFixed(4));
+    btn.addEventListener('click', function() {
+      restoreGroundStation(loc.lat, loc.lng, 14);
+      recalculate();
+      fitMapToCircles();
+    });
+    list.appendChild(btn);
+  });
+}
+
+function offerSaveLocation(lat, lng) {
+  var tooClose = recentLocations.some(function(loc) {
+    return haversineMeters(lat, lng, loc.lat, loc.lng) < 500;
+  });
+  if (tooClose) return;
+
+  showModal(
+    'Save this location?',
+    '<label class="modal-label">Label <span class="modal-optional">(optional)</span></label>' +
+    '<input type="text" class="modal-input" placeholder="e.g. Bonneville Salt Flats" maxlength="60">',
+    'Save',
+    function(label) {
+      recentLocations.unshift({
+        lat:     parseFloat(lat.toFixed(4)),
+        lng:     parseFloat(lng.toFixed(4)),
+        label:   label || null,
+        savedAt: Date.now(),
+      });
+      if (recentLocations.length > 5) recentLocations = recentLocations.slice(0, 5);
+      saveRecentLocations(recentLocations);
+      renderRecentLocations();
+    }
+  );
+}
+
+function initRecentLocations() {
+  recentLocations = loadRecentLocations();
+  renderRecentLocations();
+}
+
+// ── Export / Import ───────────────────────────────────────────────────────────
+
+function exportData() {
+  var data = {
+    version:         1,
+    exportedAt:      new Date().toISOString(),
+    lastState:       loadLastState(),
+    profiles:        loadProfiles(),
+    recentLocations: loadRecentLocations(),
+  };
+  var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'fpv-link-budget-data.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Data exported.');
+}
+
+function importData(file) {
+  var reader = new FileReader();
+  reader.onerror = function() { showToast('Could not read file.', { error: true }); };
+  reader.onload  = function(e) {
+    var data;
+    try { data = JSON.parse(e.target.result); }
+    catch (_) { showToast('Invalid JSON file.', { error: true }); return; }
+
+    if (data.version !== 1) {
+      showToast('Unsupported export version.', { error: true });
+      return;
+    }
+    if (!data.lastState       || typeof data.lastState !== 'object' ||
+        !data.profiles        || typeof data.profiles  !== 'object' ||
+        !Array.isArray(data.recentLocations)) {
+      showToast('Invalid data file -- missing required fields.', { error: true });
+      return;
+    }
+
+    showModal(
+      'Import Data',
+      '<p class="modal-message">This will overwrite your saved profiles and locations. Continue?</p>',
+      'Import',
+      function() {
+        try {
+          localStorage.setItem(STORAGE_KEYS.LAST_STATE, JSON.stringify(data.lastState));
+          saveProfiles(data.profiles);
+          saveRecentLocations(data.recentLocations);
+        } catch (err) {
+          showToast('Import failed -- storage unavailable.', { error: true });
+          return;
+        }
+        profilesData     = data.profiles;
+        recentLocations  = data.recentLocations;
+        populateProfileDropdown();
+        renderRecentLocations();
+        showToast('Data imported.');
+      }
+    );
+  };
+  reader.readAsText(file);
+}
+
+function initDataActions() {
+  document.getElementById('exportBtn').addEventListener('click', exportData);
+  var importInput = document.getElementById('importInput');
+  importInput.addEventListener('change', function(e) {
+    if (e.target.files && e.target.files[0]) {
+      importData(e.target.files[0]);
+      e.target.value = '';
+    }
+  });
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -732,29 +1081,36 @@ document.addEventListener('DOMContentLoaded', () => {
   initPanelToggle();
   initMobileLocate();
 
+  // Priority: defaults → last saved session → URL hash (highest)
+  var savedState = loadLastState();
+  if (savedState) {
+    expandCustomFromHash(savedState);
+    Object.assign(state, savedState);
+    if (savedState.groundStation) {
+      restoreGroundStation(savedState.groundStation.lat, savedState.groundStation.lng,
+                           savedState.zoom != null ? savedState.zoom : 12);
+    }
+    validateAndFixState();
+    applyStateToUI();
+  }
+
   if (window.location.hash) {
     var decoded = decodeHashToState(window.location.hash);
     expandCustomFromHash(decoded);
     Object.assign(state, decoded);
-
     if (decoded.groundStation) {
-      var latlng = L.latLng(decoded.groundStation.lat, decoded.groundStation.lng);
-      state.groundStation = latlng;
-      groundMarker = L.circleMarker(latlng, {
-        radius: 6, color: '#fff', weight: 2,
-        fillColor: '#3b82f6', fillOpacity: 1
-      }).addTo(map);
-      els.mapHint.classList.add('hidden');
-      els.mapHint.setAttribute('aria-hidden', 'true');
-      map.setView(latlng, decoded.zoom != null ? decoded.zoom : 12);
+      restoreGroundStation(decoded.groundStation.lat, decoded.groundStation.lng,
+                           decoded.zoom != null ? decoded.zoom : 12);
     }
-
     if (validateAndFixState()) {
-      showToast("Some hardware in this link isn’t available — using defaults.");
+      showToast("Some hardware in this link isn't available -- using defaults.");
     }
-
     applyStateToUI();
   }
+
+  initProfiles();
+  initRecentLocations();
+  initDataActions();
 
   recalculate();
 });
