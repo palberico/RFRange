@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>urlState round-trip tests</title>
+  <style>
+    body { font-family: monospace; background: #0f172a; color: #e2e8f0; padding: 24px; }
+    h1   { font-size: 18px; margin-bottom: 16px; }
+    .pass { color: #34d399; }
+    .fail { color: #f87171; }
+    .case { margin-bottom: 6px; font-size: 13px; }
+    .hash { color: #94a3b8; margin-left: 16px; font-size: 12px; }
+    .summary { margin-top: 20px; font-size: 15px; font-weight: bold; }
+  </style>
+</head>
+<body>
+<h1>urlState.js — round-trip tests</h1>
+<div id="output"></div>
+
+<script src="../js/urlState.js"></script>
+<script>
+  var passed = 0;
+  var failed = 0;
+  var out = document.getElementById('output');
+
+  function assert(label, actual, expected) {
+    var ok = JSON.stringify(actual) === JSON.stringify(expected);
+    var div = document.createElement('div');
+    div.className = 'case';
+    div.innerHTML = (ok ? '<span class="pass">PASS</span>' : '<span class="fail">FAIL</span>') +
+      ' — ' + label;
+    if (!ok) {
+      div.innerHTML += '<br><span class="hash">  expected: ' + JSON.stringify(expected) + '</span>' +
+                       '<br><span class="hash">  actual:   ' + JSON.stringify(actual) + '</span>';
+    }
+    out.appendChild(div);
+    ok ? passed++ : failed++;
+  }
+
+  function assertHashContains(label, hash, substring) {
+    var ok = hash.indexOf(substring) !== -1;
+    var div = document.createElement('div');
+    div.className = 'case';
+    div.innerHTML = (ok ? '<span class="pass">PASS</span>' : '<span class="fail">FAIL</span>') +
+      ' — ' + label;
+    if (!ok) {
+      div.innerHTML += '<br><span class="hash">  hash:     ' + hash + '</span>' +
+                       '<br><span class="hash">  missing:  ' + substring + '</span>';
+    }
+    out.appendChild(div);
+    ok ? passed++ : failed++;
+  }
+
+  function showHash(label, hash) {
+    var div = document.createElement('div');
+    div.className = 'hash';
+    div.textContent = label + ': #' + hash;
+    out.appendChild(div);
+  }
+
+  // ── Test 1: default state → empty hash ───────────────────────────────────
+  var defaultState = {
+    videoPreset: 'walksnail_gtpro_700',
+    videoAirAntenna: 'stock_dipole',
+    videoAntenna: 'stock',
+    controlPreset: 'elrs_gemini_50',
+    controlAirAntenna: 'stock_dipole',
+    controlAntenna: 'stock',
+    fadeMargin: 10,
+    units: 'imperial',
+    groundStation: null
+  };
+  var h1 = encodeStateToHash(defaultState);
+  assert('default state produces empty hash', h1, '');
+  showHash('T1', h1);
+
+  // ── Test 2: empty/missing hash → {} ──────────────────────────────────────
+  assert('decode empty string returns {}', decodeHashToState(''), {});
+  assert('decode null returns {}',         decodeHashToState(null), {});
+  assert('decode "#" returns {}',          decodeHashToState('#'), {});
+
+  // ── Test 3: units metric round-trips ─────────────────────────────────────
+  var metricState = Object.assign({}, defaultState, { units: 'metric' });
+  var h3 = encodeStateToHash(metricState);
+  assertHashContains('metric units encodes as u=m', h3, 'u=m');
+  var d3 = decodeHashToState(h3);
+  assert('metric units round-trips', d3.units, 'metric');
+  showHash('T3', h3);
+
+  // ── Test 4: fadeMargin non-default round-trips ────────────────────────────
+  var fmState = Object.assign({}, defaultState, { fadeMargin: 15 });
+  var h4 = encodeStateToHash(fmState);
+  assertHashContains('non-default fadeMargin encodes as fm=15', h4, 'fm=15');
+  var d4 = decodeHashToState(h4);
+  assert('fadeMargin 15 round-trips', d4.fadeMargin, 15);
+  showHash('T4', h4);
+
+  // ── Test 5: default fadeMargin omitted ────────────────────────────────────
+  var h5 = encodeStateToHash(defaultState);
+  assert('default fadeMargin (10) omitted from hash', h5.indexOf('fm=') === -1, true);
+
+  // ── Test 6: non-default video preset round-trips ──────────────────────────
+  var vpState = Object.assign({}, defaultState, { videoPreset: 'dji_o3_1w' });
+  var h6 = encodeStateToHash(vpState);
+  assertHashContains('non-default videoPreset encodes as v=dji_o3_1w', h6, 'v=dji_o3_1w');
+  var d6 = decodeHashToState(h6);
+  assert('videoPreset dji_o3_1w round-trips', d6.videoPreset, 'dji_o3_1w');
+  showHash('T6', h6);
+
+  // ── Test 7: groundStation encodes to 4 dp and round-trips ─────────────────
+  var gsState = Object.assign({}, defaultState, {
+    groundStation: { lat: 46.55123456, lng: 7.96234567 }
+  });
+  var h7 = encodeStateToHash(gsState);
+  assertHashContains('lat encoded to 4 dp', h7, 'lat=46.5512');
+  assertHashContains('lng encoded to 4 dp', h7, 'lng=7.9623');
+  var d7 = decodeHashToState(h7);
+  assert('groundStation lat round-trips to 4 dp',
+    d7.groundStation && d7.groundStation.lat, 46.5512);
+  assert('groundStation lng round-trips to 4 dp',
+    d7.groundStation && d7.groundStation.lng, 7.9623);
+  showHash('T7', h7);
+
+  // ── Test 8: zoom non-default encodes ──────────────────────────────────────
+  var zoomState = Object.assign({}, defaultState, {
+    groundStation: { lat: 46.5512, lng: 7.9623 },
+    zoom: 14
+  });
+  var h8 = encodeStateToHash(zoomState);
+  assertHashContains('non-default zoom encodes as z=14', h8, 'z=14');
+  var d8 = decodeHashToState(h8);
+  assert('zoom 14 round-trips', d8.zoom, 14);
+  showHash('T8', h8);
+
+  // ── Test 9: default zoom (12) omitted ─────────────────────────────────────
+  var zoomDefaultState = Object.assign({}, defaultState, {
+    groundStation: { lat: 46.5512, lng: 7.9623 },
+    zoom: 12
+  });
+  var h9 = encodeStateToHash(zoomDefaultState);
+  assert('default zoom (12) omitted from hash', h9.indexOf('z=') === -1, true);
+
+  // ── Test 10: hash with leading # is stripped cleanly ──────────────────────
+  var d10 = decodeHashToState('#fm=15&u=m');
+  assert('leading # stripped: fadeMargin', d10.fadeMargin, 15);
+  assert('leading # stripped: units', d10.units, 'metric');
+
+  // ── Test 11: malformed hash returns {} ────────────────────────────────────
+  assert('malformed hash (random junk) returns {}',
+    JSON.stringify(decodeHashToState('%%%')), '{}');
+  assert('key-only pair ignored gracefully',
+    typeof decodeHashToState('fm'), 'object');
+
+  // ── Test 12: unknown preset key passes through ────────────────────────────
+  var d12 = decodeHashToState('v=fake_preset_xyz');
+  assert('unknown preset key returned as-is', d12.videoPreset, 'fake_preset_xyz');
+
+  // ── Test 13: full round-trip with all fields changed ──────────────────────
+  var fullState = {
+    videoPreset:       'dji_o4_1w',
+    videoAirAntenna:   'axii_micro',
+    videoAntenna:      'helical_13',
+    controlPreset:     'crossfire_1w_50',
+    controlAirAntenna: 'immortal_t',
+    controlAntenna:    'yagi_13',
+    fadeMargin:        15,
+    units:             'metric',
+    groundStation:     { lat: 40.7128, lng: -74.0060 },
+    zoom:              10
+  };
+  var h13 = encodeStateToHash(fullState);
+  var d13 = decodeHashToState(h13);
+  assert('full round-trip: videoPreset',       d13.videoPreset,       fullState.videoPreset);
+  assert('full round-trip: videoAirAntenna',   d13.videoAirAntenna,   fullState.videoAirAntenna);
+  assert('full round-trip: videoAntenna',      d13.videoAntenna,      fullState.videoAntenna);
+  assert('full round-trip: controlPreset',     d13.controlPreset,     fullState.controlPreset);
+  assert('full round-trip: controlAirAntenna', d13.controlAirAntenna, fullState.controlAirAntenna);
+  assert('full round-trip: controlAntenna',    d13.controlAntenna,    fullState.controlAntenna);
+  assert('full round-trip: fadeMargin',        d13.fadeMargin,        fullState.fadeMargin);
+  assert('full round-trip: units',             d13.units,             fullState.units);
+  assert('full round-trip: groundStation lat', d13.groundStation && d13.groundStation.lat, 40.7128);
+  assert('full round-trip: groundStation lng', d13.groundStation && d13.groundStation.lng, -74.006);
+  assert('full round-trip: zoom',              d13.zoom,              fullState.zoom);
+  showHash('T13', h13);
+
+  // ── Test 14: custom: prefix passes through untouched ──────────────────────
+  var d14 = decodeHashToState('v=custom%3A28%2C5800%2C-95');
+  assert('custom: prefix preserved in videoPreset', d14.videoPreset, 'custom:28,5800,-95');
+
+  // ── Summary ───────────────────────────────────────────────────────────────
+  var summary = document.createElement('div');
+  summary.className = 'summary';
+  var total = passed + failed;
+  summary.innerHTML = (failed === 0
+    ? '<span class="pass">All ' + total + ' tests passed.</span>'
+    : '<span class="fail">' + failed + ' of ' + total + ' tests FAILED.</span>');
+  out.appendChild(summary);
+</script>
+</body>
+</html>

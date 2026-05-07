@@ -1,5 +1,3 @@
-
-
 // Application State
 const state = {
   groundStation: null,
@@ -11,6 +9,12 @@ const state = {
   controlPreset: 'elrs_gemini_50',
   controlAirAntenna: 'stock_dipole',
   controlAntenna: 'stock',
+  customVideoPreset: null,
+  customVideoAirAntenna: null,
+  customVideoAntenna: null,
+  customControlPreset: null,
+  customControlAirAntenna: null,
+  customControlAntenna: null,
 };
 
 let map;
@@ -40,6 +44,8 @@ const els = {
   limitingPeek: document.getElementById('limitingPeek'),
 };
 
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+
 function initFadeMarginTooltip() {
   const btn = els.fadeMarginInfoBtn;
   const tip = els.fadeMarginTooltip;
@@ -67,6 +73,8 @@ function initFadeMarginTooltip() {
   });
 }
 
+// ── Panel toggle ──────────────────────────────────────────────────────────────
+
 const PANEL_STATE_KEY = 'fpv_panel_state';
 
 function initPanelToggle() {
@@ -79,7 +87,6 @@ function initPanelToggle() {
     localStorage.setItem(PANEL_STATE_KEY, collapsed ? 'collapsed' : 'expanded');
   }
 
-  // Default to collapsed on first visit; restore saved state otherwise
   const saved = localStorage.getItem(PANEL_STATE_KEY) ?? 'collapsed';
   applyState(saved === 'collapsed');
 
@@ -131,6 +138,315 @@ function initPanelToggle() {
   }, { passive: true });
 }
 
+// ── URL state ─────────────────────────────────────────────────────────────────
+
+/**
+ * Builds a state copy with custom hardware values inlined as "custom:..." strings,
+ * ready to pass to encodeStateToHash().
+ */
+function buildHashState() {
+  var s = Object.assign({}, state, { zoom: map ? map.getZoom() : 12 });
+
+  if (s.videoPreset === 'custom' && s.customVideoPreset) {
+    var cv = s.customVideoPreset;
+    s.videoPreset = 'custom:' + cv.txPowerDbm + ',' + (cv.frequencyHz / 1e6) + ',' + cv.rxSensitivityDbm;
+  }
+  if (s.videoAirAntenna === 'custom' && s.customVideoAirAntenna) {
+    s.videoAirAntenna = 'custom:' + s.customVideoAirAntenna.gainDbi;
+  }
+  if (s.videoAntenna === 'custom' && s.customVideoAntenna) {
+    s.videoAntenna = 'custom:' + s.customVideoAntenna.gainDbi;
+  }
+  if (s.controlPreset === 'custom' && s.customControlPreset) {
+    var cc = s.customControlPreset;
+    s.controlPreset = 'custom:' + cc.txPowerDbm + ',' + (cc.frequencyHz / 1e6) + ',' + cc.rxSensitivityDbm;
+  }
+  if (s.controlAirAntenna === 'custom' && s.customControlAirAntenna) {
+    s.controlAirAntenna = 'custom:' + s.customControlAirAntenna.gainDbi;
+  }
+  if (s.controlAntenna === 'custom' && s.customControlAntenna) {
+    s.controlAntenna = 'custom:' + s.customControlAntenna.gainDbi;
+  }
+
+  return s;
+}
+
+function updateHash() {
+  var hash = encodeStateToHash(buildHashState());
+  var base = location.pathname + location.search;
+  history.replaceState(null, '', hash ? base + '#' + hash : base);
+}
+
+/**
+ * Expands "custom:..." string values in a decoded hash object into structured
+ * custom state objects. Modifies decoded in place.
+ */
+function expandCustomFromHash(decoded) {
+  var presetFields  = ['videoPreset', 'controlPreset'];
+  var antennaFields = ['videoAirAntenna', 'videoAntenna', 'controlAirAntenna', 'controlAntenna'];
+  var customKeyMap  = {
+    videoPreset:       'customVideoPreset',
+    controlPreset:     'customControlPreset',
+    videoAirAntenna:   'customVideoAirAntenna',
+    videoAntenna:      'customVideoAntenna',
+    controlAirAntenna: 'customControlAirAntenna',
+    controlAntenna:    'customControlAntenna',
+  };
+
+  presetFields.forEach(function(field) {
+    var val = decoded[field];
+    if (!val || val.indexOf('custom:') !== 0) return;
+    var parts  = val.slice(7).split(',');
+    var txPow  = parseFloat(parts[0]);
+    var freqMh = parseFloat(parts[1]);
+    var rxSens = parseFloat(parts[2]);
+    if (!isNaN(txPow) && !isNaN(freqMh) && !isNaN(rxSens)) {
+      decoded[customKeyMap[field]] = { txPowerDbm: txPow, frequencyHz: freqMh * 1e6, rxSensitivityDbm: rxSens };
+      decoded[field] = 'custom';
+    } else {
+      delete decoded[field]; // malformed — fall through to defaults
+    }
+  });
+
+  antennaFields.forEach(function(field) {
+    var val = decoded[field];
+    if (!val || val.indexOf('custom:') !== 0) return;
+    var gain = parseFloat(val.slice(7));
+    if (!isNaN(gain)) {
+      decoded[customKeyMap[field]] = { gainDbi: gain };
+      decoded[field] = 'custom';
+    } else {
+      delete decoded[field];
+    }
+  });
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+
+function showToast(message, options) {
+  var toast = document.createElement('div');
+  toast.className = 'toast' + (options && options.error ? ' error' : '');
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      toast.classList.add('visible');
+    });
+  });
+  setTimeout(function() {
+    toast.classList.remove('visible');
+    setTimeout(function() {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 350);
+  }, 2500);
+}
+
+// ── Share ─────────────────────────────────────────────────────────────────────
+
+async function handleShare() {
+  var url = window.location.href;
+  // navigator.share on desktop combines title+text+url into the Copy output;
+  // restrict it to touch devices where the native sheet behaves as expected.
+  var isTouchDevice = navigator.maxTouchPoints > 0;
+  if (isTouchDevice && navigator.share) {
+    try {
+      await navigator.share({ title: 'FPV Link Budget — my setup', url: url });
+      return;
+    } catch (e) {
+      // User cancelled or API failed — fall through to clipboard
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('Link copied to clipboard');
+  } catch (e) {
+    showToast('Could not copy link', { error: true });
+  }
+}
+
+// ── Custom hardware forms ─────────────────────────────────────────────────────
+
+function validateCustomInput(input, min, max) {
+  var val = parseFloat(input.value);
+  var error = input.parentElement.querySelector('.field-error');
+  if (input.value === '' || isNaN(val) || val < min || val > max) {
+    if (error) { error.textContent = 'Enter ' + min + ' – ' + max; error.classList.add('visible'); }
+    input.classList.add('invalid');
+    return false;
+  }
+  if (error) error.classList.remove('visible');
+  input.classList.remove('invalid');
+  return true;
+}
+
+function createCustomForm(formId, fieldDefs) {
+  var form = document.createElement('div');
+  form.className = 'custom-form';
+  form.id = formId;
+
+  fieldDefs.forEach(function(def) {
+    var group = document.createElement('div');
+    group.className = 'input-group';
+
+    var label = document.createElement('label');
+    label.textContent = def.label;
+
+    var input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'custom-input';
+    input.id = formId + '_' + def.id;
+    input.min = def.min;
+    input.max = def.max;
+    input.step = def.step;
+    input.placeholder = def.min + ' to ' + def.max;
+
+    var error = document.createElement('span');
+    error.className = 'field-error';
+
+    group.appendChild(label);
+    group.appendChild(input);
+    group.appendChild(error);
+    form.appendChild(group);
+  });
+
+  return form;
+}
+
+function readCustomPresetForm(formEl) {
+  var txInput  = formEl.querySelector('[id$="_txPowerDbm"]');
+  var frqInput = formEl.querySelector('[id$="_frequencyMhz"]');
+  var rxInput  = formEl.querySelector('[id$="_rxSensitivityDbm"]');
+  var ok = validateCustomInput(txInput, 0, 40)
+         & validateCustomInput(frqInput, 100, 6000)
+         & validateCustomInput(rxInput, -150, 0);
+  if (!ok) return null;
+  return {
+    txPowerDbm:       parseFloat(txInput.value),
+    frequencyHz:      parseFloat(frqInput.value) * 1e6,
+    rxSensitivityDbm: parseFloat(rxInput.value),
+  };
+}
+
+function readCustomAntennaForm(formEl) {
+  var gainInput = formEl.querySelector('[id$="_gainDbi"]');
+  if (!validateCustomInput(gainInput, -10, 30)) return null;
+  return { gainDbi: parseFloat(gainInput.value) };
+}
+
+function populateCustomPresetForm(formEl, customObj) {
+  if (!customObj) return;
+  var txInput  = formEl.querySelector('[id$="_txPowerDbm"]');
+  var frqInput = formEl.querySelector('[id$="_frequencyMhz"]');
+  var rxInput  = formEl.querySelector('[id$="_rxSensitivityDbm"]');
+  if (txInput)  txInput.value  = customObj.txPowerDbm;
+  if (frqInput) frqInput.value = customObj.frequencyHz / 1e6;
+  if (rxInput)  rxInput.value  = customObj.rxSensitivityDbm;
+}
+
+function populateCustomAntennaForm(formEl, customObj) {
+  if (!customObj) return;
+  var gainInput = formEl.querySelector('[id$="_gainDbi"]');
+  if (gainInput) gainInput.value = customObj.gainDbi;
+}
+
+function syncCustomForm(selectEl, formEl) {
+  formEl.classList.toggle('visible', selectEl.value === 'custom');
+}
+
+function syncAllCustomForms() {
+  [
+    ['videoPreset',       'customVideoPresetForm'],
+    ['videoAirAntenna',   'customVideoAirAntennaForm'],
+    ['videoAntenna',      'customVideoAntennaForm'],
+    ['controlPreset',     'customControlPresetForm'],
+    ['controlAirAntenna', 'customControlAirAntennaForm'],
+    ['controlAntenna',    'customControlAntennaForm'],
+  ].forEach(function(pair) {
+    var sel  = document.getElementById(pair[0]);
+    var form = document.getElementById(pair[1]);
+    if (sel && form) syncCustomForm(sel, form);
+  });
+}
+
+function initCustomForms() {
+  var presetDefs = [
+    { id: 'txPowerDbm',       label: 'TX Power (dBm)',      min: 0,    max: 40,   step: 0.1 },
+    { id: 'frequencyMhz',     label: 'Frequency (MHz)',      min: 100,  max: 6000, step: 1   },
+    { id: 'rxSensitivityDbm', label: 'RX Sensitivity (dBm)', min: -150, max: 0,    step: 0.1 },
+  ];
+  var antDefs = [
+    { id: 'gainDbi', label: 'Gain (dBi)', min: -10, max: 30, step: 0.1 },
+  ];
+
+  var configs = [
+    { select: els.videoPreset,       formId: 'customVideoPresetForm',       defs: presetDefs, stateKey: 'videoPreset',       customKey: 'customVideoPreset',       isPreset: true  },
+    { select: els.videoAirAntenna,   formId: 'customVideoAirAntennaForm',   defs: antDefs,    stateKey: 'videoAirAntenna',   customKey: 'customVideoAirAntenna',   isPreset: false },
+    { select: els.videoAntenna,      formId: 'customVideoAntennaForm',      defs: antDefs,    stateKey: 'videoAntenna',      customKey: 'customVideoAntenna',      isPreset: false },
+    { select: els.controlPreset,     formId: 'customControlPresetForm',     defs: presetDefs, stateKey: 'controlPreset',     customKey: 'customControlPreset',     isPreset: true  },
+    { select: els.controlAirAntenna, formId: 'customControlAirAntennaForm', defs: antDefs,    stateKey: 'controlAirAntenna', customKey: 'customControlAirAntenna', isPreset: false },
+    { select: els.controlAntenna,    formId: 'customControlAntennaForm',    defs: antDefs,    stateKey: 'controlAntenna',    customKey: 'customControlAntenna',    isPreset: false },
+  ];
+
+  configs.forEach(function(cfg) {
+    var opt = document.createElement('option');
+    opt.value = 'custom';
+    opt.textContent = 'Custom…';
+    cfg.select.appendChild(opt);
+
+    var form = createCustomForm(cfg.formId, cfg.defs);
+    cfg.select.closest('.input-group').insertAdjacentElement('afterend', form);
+
+    cfg.select.addEventListener('change', function() {
+      syncCustomForm(cfg.select, form);
+      if (cfg.select.value !== 'custom') state[cfg.customKey] = null;
+    });
+
+    form.querySelectorAll('.custom-input').forEach(function(input) {
+      input.addEventListener('input', function() {
+        var result = cfg.isPreset ? readCustomPresetForm(form) : readCustomAntennaForm(form);
+        if (result) {
+          state[cfg.customKey] = result;
+          recalculate();
+        }
+      });
+    });
+  });
+}
+
+// ── Preset validation (Task 5) ────────────────────────────────────────────────
+
+function validateAndFixState() {
+  var lookups = {
+    videoPreset:       videoPresets,
+    videoAirAntenna:   videoAirAntennas,
+    videoAntenna:      videoAntennas,
+    controlPreset:     controlPresets,
+    controlAirAntenna: controlAirAntennas,
+    controlAntenna:    controlAntennas,
+  };
+  var defaults = {
+    videoPreset:       'walksnail_gtpro_700',
+    videoAirAntenna:   'stock_dipole',
+    videoAntenna:      'stock',
+    controlPreset:     'elrs_gemini_50',
+    controlAirAntenna: 'stock_dipole',
+    controlAntenna:    'stock',
+  };
+  var hadBadRef = false;
+
+  for (var field in lookups) {
+    var val = state[field];
+    if (val !== 'custom' && !lookups[field][val]) {
+      state[field] = defaults[field];
+      hadBadRef = true;
+    }
+  }
+
+  return hadBadRef;
+}
+
+// ── Dropdowns ─────────────────────────────────────────────────────────────────
+
 function populateDropdown(selectEl, data) {
   selectEl.innerHTML = '';
   for (const [key, item] of Object.entries(data)) {
@@ -141,6 +457,39 @@ function populateDropdown(selectEl, data) {
   }
 }
 
+// ── Apply state to UI ─────────────────────────────────────────────────────────
+
+function applyStateToUI() {
+  els.videoPreset.value       = state.videoPreset;
+  els.videoAirAntenna.value   = state.videoAirAntenna;
+  els.videoAntenna.value      = state.videoAntenna;
+  els.controlPreset.value     = state.controlPreset;
+  els.controlAirAntenna.value = state.controlAirAntenna;
+  els.controlAntenna.value    = state.controlAntenna;
+  els.fadeMargin.value        = state.fadeMargin;
+  els.fadeMarginValue.textContent = state.fadeMargin + ' dB';
+  els.unitsToggle.checked     = state.units === 'imperial';
+
+  var customFormMap = [
+    { formId: 'customVideoPresetForm',       customKey: 'customVideoPreset',       isPreset: true  },
+    { formId: 'customControlPresetForm',     customKey: 'customControlPreset',     isPreset: true  },
+    { formId: 'customVideoAirAntennaForm',   customKey: 'customVideoAirAntenna',   isPreset: false },
+    { formId: 'customVideoAntennaForm',      customKey: 'customVideoAntenna',      isPreset: false },
+    { formId: 'customControlAirAntennaForm', customKey: 'customControlAirAntenna', isPreset: false },
+    { formId: 'customControlAntennaForm',    customKey: 'customControlAntenna',    isPreset: false },
+  ];
+  customFormMap.forEach(function(cfg) {
+    var formEl = document.getElementById(cfg.formId);
+    if (!formEl) return;
+    if (cfg.isPreset) populateCustomPresetForm(formEl, state[cfg.customKey]);
+    else              populateCustomAntennaForm(formEl, state[cfg.customKey]);
+  });
+
+  syncAllCustomForms();
+}
+
+// ── Init UI ───────────────────────────────────────────────────────────────────
+
 function initUI() {
   populateDropdown(els.videoPreset, videoPresets);
   populateDropdown(els.videoAirAntenna, videoAirAntennas);
@@ -150,24 +499,27 @@ function initUI() {
   populateDropdown(els.controlAntenna, controlAntennas);
 
   // Set initial selections based on state
-  els.videoPreset.value = state.videoPreset;
-  els.videoAirAntenna.value = state.videoAirAntenna;
-  els.videoAntenna.value = state.videoAntenna;
-  els.controlPreset.value = state.controlPreset;
+  els.videoPreset.value       = state.videoPreset;
+  els.videoAirAntenna.value   = state.videoAirAntenna;
+  els.videoAntenna.value      = state.videoAntenna;
+  els.controlPreset.value     = state.controlPreset;
   els.controlAirAntenna.value = state.controlAirAntenna;
-  els.controlAntenna.value = state.controlAntenna;
-  els.fadeMargin.value = state.fadeMargin;
+  els.controlAntenna.value    = state.controlAntenna;
+  els.fadeMargin.value        = state.fadeMargin;
   els.fadeMarginValue.textContent = `${state.fadeMargin} dB`;
-  els.unitsToggle.checked = state.units === 'imperial';
+  els.unitsToggle.checked     = state.units === 'imperial';
+
+  // Add "Custom…" options and wire custom form listeners
+  initCustomForms();
 
   // Event Listeners
-  els.videoPreset.addEventListener('change', (e) => { state.videoPreset = e.target.value; recalculate(); });
-  els.videoAirAntenna.addEventListener('change', (e) => { state.videoAirAntenna = e.target.value; recalculate(); });
-  els.videoAntenna.addEventListener('change', (e) => { state.videoAntenna = e.target.value; recalculate(); });
-  els.controlPreset.addEventListener('change', (e) => { state.controlPreset = e.target.value; recalculate(); });
+  els.videoPreset.addEventListener('change',       (e) => { state.videoPreset = e.target.value; recalculate(); });
+  els.videoAirAntenna.addEventListener('change',   (e) => { state.videoAirAntenna = e.target.value; recalculate(); });
+  els.videoAntenna.addEventListener('change',      (e) => { state.videoAntenna = e.target.value; recalculate(); });
+  els.controlPreset.addEventListener('change',     (e) => { state.controlPreset = e.target.value; recalculate(); });
   els.controlAirAntenna.addEventListener('change', (e) => { state.controlAirAntenna = e.target.value; recalculate(); });
-  els.controlAntenna.addEventListener('change', (e) => { state.controlAntenna = e.target.value; recalculate(); });
-  
+  els.controlAntenna.addEventListener('change',    (e) => { state.controlAntenna = e.target.value; recalculate(); });
+
   els.fadeMargin.addEventListener('input', (e) => {
     state.fadeMargin = parseInt(e.target.value, 10);
     els.fadeMarginValue.textContent = `${state.fadeMargin} dB`;
@@ -178,7 +530,14 @@ function initUI() {
     state.units = e.target.checked ? 'imperial' : 'metric';
     recalculate();
   });
+
+  var shareBtn       = document.getElementById('shareBtn');
+  var mobileShareBtn = document.getElementById('mobileShareBtn');
+  if (shareBtn)       shareBtn.addEventListener('click', handleShare);
+  if (mobileShareBtn) mobileShareBtn.addEventListener('click', handleShare);
 }
+
+// ── Geolocation ───────────────────────────────────────────────────────────────
 
 function locateUser(btnEl) {
   if (btnEl.classList.contains('locating')) return;
@@ -220,18 +579,17 @@ function locateUser(btnEl) {
   );
 }
 
+// ── Map ───────────────────────────────────────────────────────────────────────
+
 function initMap() {
-  // Default to a somewhat mountainous/interesting location (Swiss Alps)
   const defaultLocation = [46.551, 7.962];
-  
+
   map = L.map('map', {
-    zoomControl: false // We'll rely on scroll/pinch for a cleaner look
+    zoomControl: false
   }).setView(defaultLocation, 12);
-  
-  // Add zoom control to bottom right instead of top left
+
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-  // Add geolocation control
   const LocateControl = L.Control.extend({
     options: { position: 'bottomright' },
     onAdd: function () {
@@ -264,11 +622,8 @@ function initMap() {
 
     if (!groundMarker) {
       groundMarker = L.circleMarker(state.groundStation, {
-        radius: 6,
-        color: '#fff',
-        weight: 2,
-        fillColor: '#3b82f6',
-        fillOpacity: 1
+        radius: 6, color: '#fff', weight: 2,
+        fillColor: '#3b82f6', fillOpacity: 1
       }).addTo(map);
       els.mapHint.classList.add('hidden');
       els.mapHint.setAttribute('aria-hidden', 'true');
@@ -281,63 +636,62 @@ function initMap() {
   });
 }
 
-function recalculate() {
-  // Get presets
-  const vLink = videoPresets[state.videoPreset];
-  const vAirAnt = videoAirAntennas[state.videoAirAntenna];
-  const vAnt = videoAntennas[state.videoAntenna];
-  const cLink = controlPresets[state.controlPreset];
-  const cAirAnt = controlAirAntennas[state.controlAirAntenna];
-  const cAnt = controlAntennas[state.controlAntenna];
+// ── Calculate ─────────────────────────────────────────────────────────────────
 
-  // Calculate math
-  const videoRangeMeters = calculateMaxRangeMeters(vLink, vAirAnt.gainDbi, vAnt.gainDbi, state.fadeMargin);
+function recalculate() {
+  const vLink   = state.videoPreset       === 'custom' ? state.customVideoPreset       : videoPresets[state.videoPreset];
+  const vAirAnt = state.videoAirAntenna   === 'custom' ? state.customVideoAirAntenna   : videoAirAntennas[state.videoAirAntenna];
+  const vAnt    = state.videoAntenna      === 'custom' ? state.customVideoAntenna      : videoAntennas[state.videoAntenna];
+  const cLink   = state.controlPreset     === 'custom' ? state.customControlPreset     : controlPresets[state.controlPreset];
+  const cAirAnt = state.controlAirAntenna === 'custom' ? state.customControlAirAntenna : controlAirAntennas[state.controlAirAntenna];
+  const cAnt    = state.controlAntenna    === 'custom' ? state.customControlAntenna    : controlAntennas[state.controlAntenna];
+
+  // A custom dropdown is selected but the form isn't filled yet
+  if (!vLink || !vAirAnt || !vAnt || !cLink || !cAirAnt || !cAnt) {
+    updateHash();
+    return;
+  }
+
+  const videoRangeMeters   = calculateMaxRangeMeters(vLink, vAirAnt.gainDbi, vAnt.gainDbi, state.fadeMargin);
   const controlRangeMeters = calculateMaxRangeMeters(cLink, cAirAnt.gainDbi, cAnt.gainDbi, state.fadeMargin);
 
-  // Update Readouts
   const vFormatted = formatRange(videoRangeMeters, state.units);
   const cFormatted = formatRange(controlRangeMeters, state.units);
-  
-  els.videoRangeDisplay.innerHTML = `${vFormatted.value} <span style="font-size: 16px; font-weight: 500">${vFormatted.unit}</span>`;
+
+  els.videoRangeDisplay.innerHTML   = `${vFormatted.value} <span style="font-size: 16px; font-weight: 500">${vFormatted.unit}</span>`;
   els.controlRangeDisplay.innerHTML = `${cFormatted.value} <span style="font-size: 16px; font-weight: 500">${cFormatted.unit}</span>`;
 
-  // Determine Limiting Factor
   if (videoRangeMeters < controlRangeMeters) {
     els.limitingFactorDisplay.innerHTML = `Limiting Factor: <span class="highlight" style="color: var(--video-color)">Video Link</span>`;
   } else {
     els.limitingFactorDisplay.innerHTML = `Limiting Factor: <span class="highlight" style="color: var(--control-color)">Control Link</span>`;
   }
 
-  // Update mobile peek readouts
   const isVideoLimiting = videoRangeMeters < controlRangeMeters;
-  els.videoRangePeek.textContent = `${vFormatted.value} ${vFormatted.unit}`;
+  els.videoRangePeek.textContent   = `${vFormatted.value} ${vFormatted.unit}`;
   els.controlRangePeek.textContent = `${cFormatted.value} ${cFormatted.unit}`;
-  els.limitingPeek.textContent = isVideoLimiting ? 'Video' : 'Control';
-  els.limitingPeek.style.color = isVideoLimiting ? 'var(--video-color)' : 'var(--control-color)';
+  els.limitingPeek.textContent     = isVideoLimiting ? 'Video' : 'Control';
+  els.limitingPeek.style.color     = isVideoLimiting ? 'var(--video-color)' : 'var(--control-color)';
 
-  // Draw Map Circles if ground station exists
   if (state.groundStation && map) {
-    if (videoCircle) map.removeLayer(videoCircle);
+    if (videoCircle)   map.removeLayer(videoCircle);
     if (controlCircle) map.removeLayer(controlCircle);
 
-    // Draw control first (usually larger) so video is clickable/visible on top
     controlCircle = L.circle(state.groundStation, {
       radius: controlRangeMeters,
-      color: '#8b5cf6',
-      weight: 1.5,
-      fillColor: '#8b5cf6',
-      fillOpacity: 0.05,
+      color: '#8b5cf6', weight: 1.5,
+      fillColor: '#8b5cf6', fillOpacity: 0.05,
       dashArray: '5, 10'
     }).addTo(map);
 
     videoCircle = L.circle(state.groundStation, {
       radius: videoRangeMeters,
-      color: '#06b6d4',
-      weight: 2,
-      fillColor: '#06b6d4',
-      fillOpacity: 0.1
+      color: '#06b6d4', weight: 2,
+      fillColor: '#06b6d4', fillOpacity: 0.1
     }).addTo(map);
   }
+
+  updateHash();
 }
 
 function fitMapToCircles() {
@@ -346,17 +700,45 @@ function fitMapToCircles() {
   }
 }
 
+// ── Mobile locate ─────────────────────────────────────────────────────────────
+
 function initMobileLocate() {
   const btn = document.getElementById('mobileLocateBtn');
   btn.addEventListener('click', () => locateUser(btn));
 }
 
-// Bootstrap
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', () => {
   initUI();
   initMap();
   initFadeMarginTooltip();
   initPanelToggle();
   initMobileLocate();
+
+  if (window.location.hash) {
+    var decoded = decodeHashToState(window.location.hash);
+    expandCustomFromHash(decoded);
+    Object.assign(state, decoded);
+
+    if (decoded.groundStation) {
+      var latlng = L.latLng(decoded.groundStation.lat, decoded.groundStation.lng);
+      state.groundStation = latlng;
+      groundMarker = L.circleMarker(latlng, {
+        radius: 6, color: '#fff', weight: 2,
+        fillColor: '#3b82f6', fillOpacity: 1
+      }).addTo(map);
+      els.mapHint.classList.add('hidden');
+      els.mapHint.setAttribute('aria-hidden', 'true');
+      map.setView(latlng, decoded.zoom != null ? decoded.zoom : 12);
+    }
+
+    if (validateAndFixState()) {
+      showToast("Some hardware in this link isn’t available — using defaults.");
+    }
+
+    applyStateToUI();
+  }
+
   recalculate();
 });
