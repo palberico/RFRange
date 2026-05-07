@@ -738,6 +738,28 @@ function fitMapToCircles() {
   }
 }
 
+// ── Desktop panel collapse ────────────────────────────────────────────────────
+
+var DESKTOP_PANEL_KEY = 'fpv_panel_desktop';
+
+function initDesktopPanelToggle() {
+  var panel      = document.querySelector('.ui-panel');
+  var collapseBtn = document.getElementById('panelCollapseBtn');
+  var reopenBtn   = document.getElementById('panelReopenBtn');
+
+  function setCollapsed(collapsed) {
+    panel.classList.toggle('desktop-collapsed', collapsed);
+    reopenBtn.classList.toggle('visible', collapsed);
+    localStorage.setItem(DESKTOP_PANEL_KEY, collapsed ? 'collapsed' : 'expanded');
+  }
+
+  var saved = localStorage.getItem(DESKTOP_PANEL_KEY);
+  if (saved === 'collapsed') setCollapsed(true);
+
+  collapseBtn.addEventListener('click', function() { setCollapsed(true); });
+  reopenBtn.addEventListener('click',   function() { setCollapsed(false); });
+}
+
 // ── Mobile locate ─────────────────────────────────────────────────────────────
 
 function initMobileLocate() {
@@ -1148,6 +1170,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyStateToUI();
   }
 
+  initDesktopPanelToggle();
   initProfiles();
   initRecentLocations();
   initDataActions();

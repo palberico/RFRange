@@ -60,6 +60,46 @@ body {
   flex-direction: column;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   overflow: hidden;
+  transition: transform 250ms ease-out;
+}
+
+.ui-panel.desktop-collapsed {
+  transform: translateX(calc(-100% - 24px));
+}
+
+/* Reopen tab — aligns with the panel header so it sits where the close button was */
+.panel-reopen-btn {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 47px;
+  z-index: 1001;
+  width: 28px;
+  height: 44px;
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-left: none;
+  border-radius: 0 10px 10px 0;
+  color: var(--text-main);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
+  transition: var(--transition);
+}
+
+.panel-reopen-btn.visible {
+  display: flex;
+}
+
+.panel-reopen-btn:hover,
+.panel-reopen-btn:focus-visible {
+  color: white;
+  background: rgba(59, 130, 246, 0.35);
+  border-color: var(--accent);
+  outline: none;
 }
 
 header {
@@ -74,6 +114,36 @@ header {
 
 .header-title {
   min-width: 0; /* allow flex child to shrink */
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Desktop panel collapse button */
+.panel-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+
+.panel-collapse-btn:hover,
+.panel-collapse-btn:focus-visible {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
 }
 
 h1 {
@@ -1152,6 +1222,12 @@ footer {
   /* Footer export/import buttons are redundant on mobile — action bar covers them */
   .data-actions {
     display: none;
+  }
+
+  /* Desktop-only controls — hidden on mobile */
+  .panel-collapse-btn,
+  .panel-reopen-btn {
+    display: none !important;
   }
 
   /* Hide redundant title when panel is expanded on mobile */
