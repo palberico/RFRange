@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FPV Link Budget Estimator</title>
+  <meta name="description" content="Estimate your realistic FPV drone flight range with RF link budget math.">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  
+  <!-- App Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Map Container -->
+  <div id="map"></div>
+  
+  <!-- Glassmorphic UI Panel -->
+  <main class="ui-panel">
+
+    <!-- Mobile-only: always visible handle + compact results peek -->
+    <div class="panel-header">
+      <button class="panel-toggle-btn" id="panelToggle"
+              aria-expanded="false"
+              aria-controls="panelBody"
+              aria-label="Toggle controls panel">
+        <span class="handle-pill" aria-hidden="true"></span>
+        <span class="panel-peek-title">FPV Range Estimator</span>
+        <div class="peek-row">
+          <div class="peek-stat">
+            <span class="peek-label">Video</span>
+            <span class="peek-value video-peek" id="videoRangePeek">--</span>
+          </div>
+          <div class="peek-divider" aria-hidden="true"></div>
+          <div class="peek-stat">
+            <span class="peek-label">Control</span>
+            <span class="peek-value control-peek" id="controlRangePeek">--</span>
+          </div>
+          <div class="peek-divider" aria-hidden="true"></div>
+          <div class="peek-stat">
+            <span class="peek-label">Limiting</span>
+            <span class="peek-value" id="limitingPeek">--</span>
+          </div>
+        </div>
+      </button>
+      <button class="mobile-locate-btn" id="mobileLocateBtn"
+              aria-label="Center on my location">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <line x1="12" y1="2" x2="12" y2="6"/>
+          <line x1="12" y1="18" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="6" y2="12"/>
+          <line x1="18" y1="12" x2="22" y2="12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Full controls: always visible on desktop, collapsible on mobile -->
+    <div class="panel-body" id="panelBody">
+      <header>
+        <h1>FPV Range Estimator</h1>
+        <p class="subtitle">RF Link Budget Calculator</p>
+      </header>
+
+      <div class="scrollable-content">
+        <section class="controls-section video-section">
+          <h2>Video Link</h2>
+          <div class="input-group">
+            <label for="videoPreset">Hardware</label>
+            <select id="videoPreset"></select>
+          </div>
+          <div class="input-group">
+            <label for="videoAirAntenna">Air Antenna</label>
+            <select id="videoAirAntenna"></select>
+          </div>
+          <div class="input-group">
+            <label for="videoAntenna">Ground Antenna</label>
+            <select id="videoAntenna"></select>
+          </div>
+        </section>
+
+        <section class="controls-section control-section">
+          <h2>Control Link</h2>
+          <div class="input-group">
+            <label for="controlPreset">Hardware</label>
+            <select id="controlPreset"></select>
+          </div>
+          <div class="input-group">
+            <label for="controlAirAntenna">Air Antenna</label>
+            <select id="controlAirAntenna"></select>
+          </div>
+          <div class="input-group">
+            <label for="controlAntenna">Ground Antenna</label>
+            <select id="controlAntenna"></select>
+          </div>
+        </section>
+
+        <section class="controls-section global-section">
+          <h2>Environment</h2>
+          <div class="input-group slider-group">
+            <div class="label-row">
+              <div class="label-info-group">
+                <label for="fadeMargin">Fade Margin</label>
+                <button class="info-btn" id="fadeMarginInfoBtn" aria-label="What is fade margin?" aria-expanded="false" aria-controls="fadeMarginTooltip">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                    <circle cx="7" cy="7" r="6.25" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M7 6.5v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <circle cx="7" cy="4" r="0.75" fill="currentColor"/>
+                  </svg>
+                </button>
+                <div class="info-tooltip" id="fadeMarginTooltip" role="tooltip" aria-hidden="true">
+                  <p class="tooltip-title">Fade Margin</p>
+                  <p>A dB safety buffer subtracted from the link budget before computing range. It accounts for degradation the free-space model can't predict.</p>
+                  <ul>
+                    <li><strong>Raise it</strong> when flying near trees, buildings, or RF interference — or any time reliable link matters more than maximum distance.</li>
+                    <li><strong>Lower it</strong> only in open, interference-free conditions to approach the theoretical ceiling.</li>
+                  </ul>
+                  <p class="tooltip-note">10 dB is a common starting point. Long-range explorers often use 15–20 dB; open-field racers may use 6 dB.</p>
+                </div>
+              </div>
+              <span id="fadeMarginValue" class="value-badge">10 dB</span>
+            </div>
+            <input type="range" id="fadeMargin" min="0" max="30" value="10" step="1">
+            <small class="hint">Higher margin = more conservative estimate</small>
+          </div>
+
+          <div class="toggle-group">
+            <label>Units</label>
+            <div class="toggle">
+              <input type="checkbox" id="unitsToggle" class="toggle-checkbox">
+              <label for="unitsToggle" class="toggle-label">
+                <span class="metric">Metric</span>
+                <span class="imperial">Imperial</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section class="results-section">
+          <div class="result-card video-result">
+            <div class="result-label">Video Max Range</div>
+            <div class="result-value" id="videoRangeDisplay">--</div>
+          </div>
+          <div class="result-card control-result">
+            <div class="result-label">Control Max Range</div>
+            <div class="result-value" id="controlRangeDisplay">--</div>
+          </div>
+          <div class="limiting-factor" id="limitingFactorDisplay">
+            Limiting Factor: <span class="highlight">--</span>
+          </div>
+        </section>
+      </div>
+
+      <footer>
+        <p class="disclaimer">Estimates are theoretical free-space calculations. Real-world range is reduced by terrain, foliage, interference, and antenna patterns.</p>
+      </footer>
+    </div>
+
+  </main>
+
+  <div id="map-hint" class="map-hint glass-chip" aria-live="polite">
+    <span>Click the map to set your ground station</span>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- App JS -->
+  <script src="js/presets.js"></script>
+  <script src="js/math.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
