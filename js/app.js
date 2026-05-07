@@ -243,22 +243,38 @@ function showToast(message, options) {
 
 // ── Share ─────────────────────────────────────────────────────────────────────
 
-async function handleShare() {
+function handleShare() {
   var url = window.location.href;
-  // navigator.share on desktop combines title+text+url into the Copy output;
-  // restrict it to touch devices where the native sheet behaves as expected.
-  var isTouchDevice = navigator.maxTouchPoints > 0;
-  if (isTouchDevice && navigator.share) {
-    try {
-      await navigator.share({ title: 'FPV Link Budget — my setup', url: url });
-      return;
-    } catch (e) {
-      // User cancelled or API failed — fall through to clipboard
-    }
+  // Use native share sheet only on touch devices; desktop always copies to clipboard.
+  if (navigator.maxTouchPoints > 0 && navigator.share) {
+    navigator.share({ title: 'FPV Link Budget — my setup', url: url })
+      .catch(function() { copyUrlToClipboard(url); });
+    return;
   }
+  copyUrlToClipboard(url);
+}
+
+function copyUrlToClipboard(url) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url)
+      .then(function() { showToast('Link copied to clipboard'); })
+      .catch(function() { execCommandCopy(url); });
+  } else {
+    execCommandCopy(url);
+  }
+}
+
+function execCommandCopy(url) {
   try {
-    await navigator.clipboard.writeText(url);
-    showToast('Link copied to clipboard');
+    var ta = document.createElement('textarea');
+    ta.value = url;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    var ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast(ok ? 'Link copied to clipboard' : 'Could not copy link');
   } catch (e) {
     showToast('Could not copy link', { error: true });
   }
