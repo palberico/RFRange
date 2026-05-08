@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>math.js tests</title>
+<style>body{font-family:monospace;background:#0f172a;color:#e2e8f0;padding:24px}
+.pass{color:#34d399}.fail{color:#f87171}.case{margin:6px 0}</style>
+</head><body>
+<h1>math.js — calculation tests</h1>
+<div id="output"></div>
+<script src="../js/math.js"></script>
+<script>
+  let passed = 0, failed = 0;
+  const out = document.getElementById('output');
+
+  function assertClose(label, actual, expected, tolerancePercent = 1) {
+    const diff = Math.abs(actual - expected);
+    const ok = diff <= expected * (tolerancePercent / 100);
+    const div = document.createElement('div');
+    div.className = 'case';
+    div.innerHTML = (ok ? '<span class="pass">PASS</span>' : '<span class="fail">FAIL</span>') +
+      ` — ${label} (got ${actual.toFixed(1)}, expected ~${expected})`;
+    out.appendChild(div);
+    ok ? passed++ : failed++;
+  }
+
+  // Walksnail 700mW @ 5.8 GHz, 4 dBi total gain, -95 dBm sens, 10 dB fade → ~3100 m
+  assertClose('Walksnail GT Pro 700mW typical setup',
+    calculateMaxRangeMeters(
+      { txPowerDbm: 28.5, frequencyHz: 5.8e9, rxSensitivityDbm: -95 },
+      2.0, 2.0, 10
+    ), 3100, 5);
+
+  // ELRS 915 MHz, 24 dBm TX, 4.2 dBi total, -120 dBm sens, 10 dB fade → ~210 km
+  assertClose('ELRS 915 MHz long-range setup',
+    calculateMaxRangeMeters(
+      { txPowerDbm: 24, frequencyHz: 915e6, rxSensitivityDbm: -120 },
+      2.1, 2.1, 10
+    ), 211000, 5);
+
+  // Higher fade margin should reduce range
+  const baseRange = calculateMaxRangeMeters(
+    { txPowerDbm: 28.5, frequencyHz: 5.8e9, rxSensitivityDbm: -95 }, 2, 2, 10);
+  const conservativeRange = calculateMaxRangeMeters(
+    { txPowerDbm: 28.5, frequencyHz: 5.8e9, rxSensitivityDbm: -95 }, 2, 2, 20);
+  const ratio = baseRange / conservativeRange;
+  assertClose('10 dB more fade margin reduces range by ~3.16x', ratio, 3.16, 2);
+
+  // formatRange — metric km
+  const fm = formatRange(3100, 'metric');
+  out.insertAdjacentHTML('beforeend',
+    `<div class="case">${fm.value === '3.10' && fm.unit === 'km' ? '<span class="pass">PASS</span>' : '<span class="fail">FAIL</span>'} — formatRange 3100m metric → "${fm.value} ${fm.unit}"</div>`);
+  fm.value === '3.10' && fm.unit === 'km' ? passed++ : failed++;
+
+  // formatRange — imperial mi
+  const fi = formatRange(3100, 'imperial');
+  out.insertAdjacentHTML('beforeend',
+    `<div class="case">${fi.unit === 'mi' ? '<span class="pass">PASS</span>' : '<span class="fail">FAIL</span>'} — formatRange 3100m imperial → "${fi.value} ${fi.unit}"</div>`);
+  fi.unit === 'mi' ? passed++ : failed++;
+
+  out.insertAdjacentHTML('beforeend',
+    `<div style="margin-top:20px;font-weight:bold">${failed === 0 ? `<span class="pass">All ${passed} tests passed.</span>` : `<span class="fail">${failed} of ${passed+failed} tests FAILED.</span>`}</div>`);
+</script></body></html>
