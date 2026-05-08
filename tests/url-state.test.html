@@ -58,7 +58,7 @@
     out.appendChild(div);
   }
 
-  // ── Test 1: default state → empty hash ───────────────────────────────────
+  // ── Test 1: every selected field is encoded ──────────────────────────────
   var defaultState = {
     videoPreset: 'walksnail_gtpro_700',
     videoAirAntenna: 'stock_dipole',
@@ -71,7 +71,11 @@
     groundStation: null
   };
   var h1 = encodeStateToHash(defaultState);
-  assert('default state produces empty hash', h1, '');
+  assertHashContains('selected videoPreset is encoded', h1, 'v=walksnail_gtpro_700');
+  assertHashContains('selected videoAirAntenna is encoded', h1, 'va=stock_dipole');
+  assertHashContains('selected controlPreset is encoded', h1, 'c=elrs_gemini_50');
+  assertHashContains('selected fadeMargin is encoded', h1, 'fm=10');
+  assertHashContains('selected units (imperial) is encoded', h1, 'u=i');
   showHash('T1', h1);
 
   // ── Test 2: empty/missing hash → {} ──────────────────────────────────────
@@ -95,9 +99,9 @@
   assert('fadeMargin 15 round-trips', d4.fadeMargin, 15);
   showHash('T4', h4);
 
-  // ── Test 5: default fadeMargin omitted ────────────────────────────────────
+  // ── Test 5: fadeMargin always encoded, even at common value ──────────────
   var h5 = encodeStateToHash(defaultState);
-  assert('default fadeMargin (10) omitted from hash', h5.indexOf('fm=') === -1, true);
+  assert('fadeMargin 10 always encoded when present', h5.indexOf('fm=10') !== -1, true);
 
   // ── Test 6: non-default video preset round-trips ──────────────────────────
   var vpState = Object.assign({}, defaultState, { videoPreset: 'dji_o3_1w' });
@@ -132,13 +136,13 @@
   assert('zoom 14 round-trips', d8.zoom, 14);
   showHash('T8', h8);
 
-  // ── Test 9: default zoom (12) omitted ─────────────────────────────────────
+  // ── Test 9: zoom always encoded when present ─────────────────────────────
   var zoomDefaultState = Object.assign({}, defaultState, {
     groundStation: { lat: 46.5512, lng: 7.9623 },
     zoom: 12
   });
   var h9 = encodeStateToHash(zoomDefaultState);
-  assert('default zoom (12) omitted from hash', h9.indexOf('z=') === -1, true);
+  assert('zoom 12 always encoded when present', h9.indexOf('z=12') !== -1, true);
 
   // ── Test 10: hash with leading # is stripped cleanly ──────────────────────
   var d10 = decodeHashToState('#fm=15&u=m');
@@ -186,6 +190,23 @@
   // ── Test 14: custom: prefix passes through untouched ──────────────────────
   var d14 = decodeHashToState('v=custom%3A28%2C5800%2C-95');
   assert('custom: prefix preserved in videoPreset', d14.videoPreset, 'custom:28,5800,-95');
+
+  // ── Test 15: empty/unselected fields are omitted from the hash ───────────
+  var partialState = {
+    videoPreset: '',                  // not selected yet
+    videoAirAntenna: 'axii_micro',    // selected
+    videoAntenna: '',                 // not selected yet
+    controlPreset: '',
+    controlAirAntenna: '',
+    controlAntenna: '',
+    fadeMargin: 10,
+    units: 'imperial',
+    groundStation: null
+  };
+  var h15 = encodeStateToHash(partialState);
+  assert('empty videoPreset omitted',     h15.indexOf('v=') === -1, true);
+  assert('selected videoAirAntenna kept', h15.indexOf('va=axii_micro') !== -1, true);
+  showHash('T15', h15);
 
   // ── Summary ───────────────────────────────────────────────────────────────
   var summary = document.createElement('div');

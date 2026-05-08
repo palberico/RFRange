@@ -9,19 +9,6 @@
  * responsible for converting to/from L.latLng().
  */
 
-/** Default values — fields that match these are omitted from the encoded hash. */
-const DEFAULTS = {
-  videoPreset:       'walksnail_gtpro_700',
-  videoAirAntenna:   'stock_dipole',
-  videoAntenna:      'stock',
-  controlPreset:     'elrs_gemini_50',
-  controlAirAntenna: 'stock_dipole',
-  controlAntenna:    'stock',
-  fadeMargin:        10,
-  units:             'imperial',
-  zoom:              12
-};
-
 /**
  * Short URL parameter keys for each state field.
  * These must remain stable — changing them breaks existing shared links.
@@ -46,7 +33,7 @@ const KEY_TO_FIELD = {};
 
 /**
  * Encodes app state to a URL hash string (without the leading #).
- * Non-default values only — keeps shared URLs compact.
+ * All selected (non-empty) values are encoded; blank/null fields are omitted.
  *
  * @param {Object} state - The current app state object
  * @returns {string} Encoded hash string, e.g. "v=walksnail_gtpro_700&fm=15"
@@ -58,8 +45,7 @@ function encodeStateToHash(state) {
     var key = FIELD_TO_KEY[field];
     var value = state[field];
 
-    if (value === undefined || value === null) continue;
-    if (value === DEFAULTS[field]) continue;
+    if (value === undefined || value === null || value === '') continue;
 
     // units stored internally as 'metric'/'imperial', encode as 'm'/'i'
     if (field === 'units') {
@@ -77,8 +63,8 @@ function encodeStateToHash(state) {
     parts.push('lng=' + encodeURIComponent(lng));
   }
 
-  // Map zoom — omit when equal to default
-  if (state.zoom !== undefined && state.zoom !== null && state.zoom !== DEFAULTS.zoom) {
+  // Map zoom
+  if (state.zoom !== undefined && state.zoom !== null) {
     parts.push('z=' + encodeURIComponent(state.zoom));
   }
 
