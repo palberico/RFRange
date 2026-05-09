@@ -27,8 +27,8 @@ let groundMarker = null;
 var currentVideoRangeM   = 0;
 var currentControlRangeM = 0;
 
-// Terrain overlay polygons managed by renderTerrainOverlays / invalidateTerrainResult
-var terrainOverlays = [];
+// Coverage polygon managed by renderCoveragePolygon / invalidateTerrainResult
+var coveragePolygon = null;
 
 // DOM Elements
 const els = {
@@ -801,35 +801,20 @@ function setTerrainBtnLoading(loading) {
 }
 
 function invalidateTerrainResult() {
-  terrainOverlays.forEach(function(o) { map.removeLayer(o); });
-  terrainOverlays = [];
+  if (coveragePolygon) { map.removeLayer(coveragePolygon); coveragePolygon = null; }
   showTerrainStatus('idle', 'Click to analyze line-of-sight');
 }
 
-function renderTerrainOverlays(profiles, blockedBearings, maxRangeM) {
-  terrainOverlays.forEach(function(o) { map.removeLayer(o); });
-  terrainOverlays = [];
-
-  blockedBearings.forEach(function(p) {
-    var halfWidth  = 5;
-    var blockDist  = p.los.blockingDistanceM || maxRangeM;
-    var points     = [[state.groundStation.lat, state.groundStation.lng]];
-
-    for (var bb = p.bearing - halfWidth; bb <= p.bearing + halfWidth; bb += 0.5) {
-      var dest = destinationPoint(state.groundStation.lat, state.groundStation.lng, bb, blockDist);
-      points.push([dest.lat, dest.lng]);
-    }
-    points.push([state.groundStation.lat, state.groundStation.lng]);
-
-    var polygon = L.polygon(points, {
-      color: '#ef4444',
-      weight: 1,
-      fillColor: '#ef4444',
-      fillOpacity: 0.25,
-      interactive: false
-    }).addTo(map);
-    terrainOverlays.push(polygon);
-  });
+function renderCoveragePolygon(polygonPoints) {
+  if (coveragePolygon) { map.removeLayer(coveragePolygon); coveragePolygon = null; }
+  var closedPoints = polygonPoints.concat([polygonPoints[0]]);
+  coveragePolygon = L.polygon(closedPoints, {
+    color: '#34d399',
+    weight: 2,
+    fillColor: '#34d399',
+    fillOpacity: 0.15,
+    interactive: false
+  }).addTo(map);
 }
 
 // In-memory cache keyed by "lat,lng,maxRange" — cleared on page reload
@@ -840,76 +825,124 @@ function elevationCacheKey(lat, lng, maxRangeM) {
 }
 
 async function runTerrainAnalysis() {
-  var maxRangeM = Math.min(currentVideoRangeM, currentControlRangeM);
-  if (!isFinite(maxRangeM) || maxRangeM <= 0) {
+  var TERRAIN_RANGE_CAP_M = 50000; // 50 km — GLO-30 resolution beyond this is impractical
+  var rfRangeM  = Math.max(currentVideoRangeM, currentControlRangeM);
+  if (!isFinite(rfRangeM) || rfRangeM <= 0) {
     showTerrainStatus('error', 'Configure hardware first');
     return;
   }
+  var maxRangeM = Math.min(rfRangeM, TERRAIN_RANGE_CAP_M);
+  var capped    = rfRangeM > TERRAIN_RANGE_CAP_M;
 
-  var limitingFreq = currentVideoRangeM < currentControlRangeM
-    ? videoPresets[state.videoPreset].frequencyHz
-    : controlPresets[state.controlPreset].frequencyHz;
+  var videoFreq    = videoPresets[state.videoPreset].frequencyHz;
+  var controlFreq  = controlPresets[state.controlPreset].frequencyHz;
+  var analysisFreq = Math.min(videoFreq, controlFreq);
 
   setTerrainBtnLoading(true);
-  showTerrainStatus('computing', 'Sampling 36 bearings…');
+  showTerrainStatus('computing', 'Sampling 18 bearings (coarse pass)…');
 
   try {
-    var cacheKey = elevationCacheKey(state.groundStation.lat, state.groundStation.lng, maxRangeM);
-    var cached   = elevationCache[cacheKey];
-
-    var gsElev, allElevations, profiles;
+    // ── PASS 1: Coarse ────────────────────────────────────────────────────────────
 
     var bearings = [];
-    for (var b = 0; b < 360; b += 10) bearings.push(b);
+    for (var b = 0; b < 360; b += 20) bearings.push(b);
 
-    profiles = bearings.map(function(b) {
+    var profiles = bearings.map(function(b) {
       return {
         bearing: b,
         samples: buildSampleProfile(state.groundStation.lat, state.groundStation.lng, b, maxRangeM)
       };
     });
 
+    // GS point prepended → single batch avoids a standalone 1-point request
+    var coarsePoints = [{ lat: state.groundStation.lat, lng: state.groundStation.lng }];
+    profiles.forEach(function(p) {
+      p.samples.forEach(function(s) { coarsePoints.push({ lat: s.lat, lng: s.lng }); });
+    });
+
+    var cacheKey = elevationCacheKey(state.groundStation.lat, state.groundStation.lng, maxRangeM);
+    var cached   = elevationCache[cacheKey];
+    var gsElev, coarseElevs;
+
     if (cached) {
-      gsElev        = cached.gsElev;
-      allElevations = cached.allElevations;
+      gsElev      = cached.gsElev;
+      coarseElevs = [gsElev].concat(cached.allElevations);
     } else {
-      gsElev = (await fetchElevations([{
-        lat: state.groundStation.lat,
-        lng: state.groundStation.lng
-      }]))[0];
-
-      var allPoints = [];
-      profiles.forEach(function(p) {
-        p.samples.forEach(function(s) { allPoints.push({ lat: s.lat, lng: s.lng }); });
-      });
-
-      showTerrainStatus('computing', 'Fetching elevation data…');
-      allElevations = await fetchElevations(allPoints);
-
-      elevationCache[cacheKey] = { gsElev: gsElev, allElevations: allElevations };
+      showTerrainStatus('computing', 'Fetching coarse elevation data…');
+      coarseElevs = await fetchElevations(coarsePoints);
+      gsElev      = coarseElevs[0];
+      elevationCache[cacheKey] = { gsElev: gsElev, allElevations: coarseElevs.slice(1) };
     }
 
-    var idx = 0;
+    var idx = 1;
     profiles.forEach(function(p) {
-      p.elevations = p.samples.map(function() { return allElevations[idx++]; });
-    });
-
-    showTerrainStatus('computing', 'Evaluating line-of-sight…');
-    var blockedBearings = [];
-    profiles.forEach(function(p) {
+      p.elevations = p.samples.map(function() { return coarseElevs[idx++]; });
       var distances = p.samples.map(function(s) { return s.distanceMeters; });
-      var result = evaluateLineOfSight(
-        p.elevations, distances,
-        gsElev, 1.5,
-        state.aircraftAltitudeM, limitingFreq
-      );
-      p.los = result;
-      if (!result.clear) blockedBearings.push(p);
+      p.reach = findReachDistance(p.elevations, distances, gsElev, 1.5,
+                                  state.aircraftAltitudeM, analysisFreq);
     });
 
-    renderTerrainOverlays(profiles, blockedBearings, maxRangeM);
-    var blockedPercent = Math.round(100 * blockedBearings.length / profiles.length);
-    showTerrainStatus('done', blockedPercent + '% of bearings blocked');
+    // ── PASS 2: Refinement (only where coarse pass found a break) ─────────────────
+
+    var needsRefine = profiles.filter(function(p) { return p.reach.brokeAtSampleIdx !== null; });
+
+    if (needsRefine.length > 0) {
+      showTerrainStatus('computing', 'Refining ' + needsRefine.length + ' bearings…');
+
+      var refinePoints = [];
+      var profileRefineStart = [];
+
+      needsRefine.forEach(function(p) {
+        profileRefineStart.push(refinePoints.length);
+        var bi       = p.reach.brokeAtSampleIdx;
+        var nearDist = p.samples[bi - 1].distanceMeters;
+        var farDist  = p.samples[bi].distanceMeters;
+        buildRefinementProfile(state.groundStation.lat, state.groundStation.lng,
+                               p.bearing, nearDist, farDist)
+          .forEach(function(s) { refinePoints.push(s); });
+      });
+
+      var refineElevs = await fetchElevations(refinePoints);
+
+      needsRefine.forEach(function(p, pi) {
+        var start    = profileRefineStart[pi];
+        var refSamp  = refinePoints.slice(start, start + 4);
+        var refElev  = refineElevs.slice(start, start + 4);
+        var bi       = p.reach.brokeAtSampleIdx;
+
+        var mergedSamples = p.samples.slice(0, bi).concat(refSamp).concat(p.samples.slice(bi));
+        var mergedElevs   = p.elevations.slice(0, bi).concat(refElev).concat(p.elevations.slice(bi));
+        var mergedDists   = mergedSamples.map(function(s) { return s.distanceMeters; });
+
+        p.reach = findReachDistance(mergedElevs, mergedDists, gsElev, 1.5,
+                                    state.aircraftAltitudeM, analysisFreq);
+      });
+    }
+
+    // ── Build and render coverage polygon ─────────────────────────────────────────
+
+    var polygonPoints = profiles.map(function(p) {
+      var dest = destinationPoint(state.groundStation.lat, state.groundStation.lng,
+                                  p.bearing, p.reach.reachM);
+      return [dest.lat, dest.lng];
+    });
+    renderCoveragePolygon(polygonPoints);
+
+    // Coverage area: sum of 18 triangular slices (bearing step = 20°)
+    var sliceAngle    = 20 * Math.PI / 180;
+    var coverageM2    = 0;
+    profiles.forEach(function(p) {
+      coverageM2 += 0.5 * p.reach.reachM * p.reach.reachM * Math.sin(sliceAngle);
+    });
+    var freeSpaceM2   = Math.PI * maxRangeM * maxRangeM;
+    var coveragePct   = Math.round(100 * coverageM2 / freeSpaceM2);
+    var areaText      = state.units === 'imperial'
+      ? (coverageM2 / 2589988).toFixed(1) + ' mi²'
+      : (coverageM2 / 1000000).toFixed(1) + ' km²';
+
+    var doneMsg = areaText + ' flyable (' + coveragePct + '% of free-space)';
+    if (capped) doneMsg += ' — analyzed to 50 km';
+    showTerrainStatus('done', doneMsg);
 
   } catch (err) {
     console.error('[fpv] terrain analysis failed:', err);
@@ -991,14 +1024,14 @@ function recalculate() {
     controlCircle = L.circle(state.groundStation, {
       radius: controlRangeMeters,
       color: '#8b5cf6', weight: 1.5,
-      fillColor: '#8b5cf6', fillOpacity: 0.05,
+      fill: false,
       dashArray: '5, 10'
     }).addTo(map);
 
     videoCircle = L.circle(state.groundStation, {
       radius: videoRangeMeters,
       color: '#06b6d4', weight: 2,
-      fillColor: '#06b6d4', fillOpacity: 0.1
+      fill: false
     }).addTo(map);
   }
 

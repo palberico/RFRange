@@ -257,12 +257,13 @@ h2 {
 
 .section-body {
   max-height: 800px;
-  overflow: hidden;
+  overflow: visible;
   transition: max-height 0.3s ease;
 }
 
 .controls-section.collapsed .section-body {
   max-height: 0;
+  overflow: hidden;
 }
 
 .controls-section.collapsed h2 {

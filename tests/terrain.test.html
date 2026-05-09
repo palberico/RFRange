@@ -165,25 +165,77 @@
 
   // ── buildSampleProfile ────────────────────────────────────────────────────────
 
-  section('buildSampleProfile');
+  section('buildSampleProfile (10-point fraction-based)');
 
   (function() {
-    var profile = buildSampleProfile(0, 0, 0, 5000);
-    assert('profile starts at distance 0', profile[0].distanceMeters, 0);
-    assert('profile ends at maxDistance', profile[profile.length - 1].distanceMeters, 5000);
-    assert('origin lat is correct', profile[0].lat, 0);
-    assert('origin lng is correct', profile[0].lng, 0);
-    assert('profile has at least 5 points', profile.length >= 5, true);
-    // First non-origin point should be close to origin (dense near-field sampling)
-    assert('second point is 5 m from origin', profile[1].distanceMeters, 5);
+    var profile = buildSampleProfile(0, 0, 0, 50000);
+    assert('profile has exactly 10 points', profile.length, 10);
+    // First point is max(20, 50000 * 0.001) = max(20, 50) = 50 m
+    assert('first point is 50 m', profile[0].distanceMeters, 50);
+    // Last fraction = 1.0 → exactly maxDistance
+    assert('last point is maxDistance', profile[9].distanceMeters, 50000);
   })();
 
   (function() {
-    var profile = buildSampleProfile(0, 0, 0, 100000);
-    assert('long profile starts at 0', profile[0].distanceMeters, 0);
-    assert('long profile ends at 100 km', profile[profile.length - 1].distanceMeters, 100000);
-    // Should have roughly 25-35 points for a 100 km profile
-    assert('long profile has ~30 points (25–35)', profile.length >= 25 && profile.length <= 35, true);
+    // At short ranges the 20m floor kicks in for the smallest fractions
+    var profile = buildSampleProfile(0, 0, 0, 1000);
+    assert('short range: 10 points', profile.length, 10);
+    // 0.001 × 1000 = 1m → floored to 20m
+    assert('short range: first point floored to 20 m', profile[0].distanceMeters, 20);
+    assert('short range: last point at maxDistance', profile[9].distanceMeters, 1000);
+  })();
+
+  // ── buildRefinementProfile ────────────────────────────────────────────────────
+
+  section('buildRefinementProfile');
+
+  (function() {
+    var refSamples = buildRefinementProfile(0, 0, 0, 1000, 5000);
+    assert('refinement returns 4 points', refSamples.length, 4);
+    // Points at 1/5, 2/5, 3/5, 4/5 of the gap
+    assertClose('refinement point 0 at 1800 m', refSamples[0].distanceMeters, 1800, 1);
+    assertClose('refinement point 1 at 2600 m', refSamples[1].distanceMeters, 2600, 1);
+    assertClose('refinement point 2 at 3400 m', refSamples[2].distanceMeters, 3400, 1);
+    assertClose('refinement point 3 at 4200 m', refSamples[3].distanceMeters, 4200, 1);
+  })();
+
+  // ── findReachDistance ─────────────────────────────────────────────────────────
+
+  section('findReachDistance');
+
+  // Flat terrain at 100 m MSL, aircraft 60 m AGL, GS at 101.5 m
+  // At every sample the LOS from GS clears the 100 m terrain — full reach expected.
+  (function() {
+    var elevs = [100, 100, 100, 100, 100];
+    var dists = [50, 1000, 5000, 20000, 50000];
+    var r = findReachDistance(elevs, dists, 100, 1.5, 60, 915e6);
+    assert('flat terrain → full reach', r.reachM, 50000);
+    assert('flat terrain → no break',   r.brokeAtSampleIdx, null);
+  })();
+
+  // Ridge at sample 2 (5000 m, elevation 800 m). Aircraft is at 60 m AGL.
+  // When checking whether the aircraft can reach 20000 m (sample 3, elevation 100 m,
+  // MSL 160 m), the LOS line from GS (101.5 m) to aircraft (160 m at 20000 m) passes
+  // through the ridge at 5000 m — directHeight (116 m) << terrain (801 m) → blocked.
+  // Reach = last clear point = dists[2] = 5000 m.
+  (function() {
+    var elevs = [100, 100, 800, 100, 100];
+    var dists = [50, 1000, 5000, 20000, 50000];
+    var r = findReachDistance(elevs, dists, 100, 1.5, 60, 915e6);
+    assert('ridge blocks past it → reach is ridge distance', r.reachM, 5000);
+    assert('ridge blocks → broke at index 3 (trying to pass ridge)', r.brokeAtSampleIdx, 3);
+    assert('ridge blocks → reachM < maxDistance', r.reachM < 50000, true);
+  })();
+
+  // Obstacle right near origin (sample 1, 1000 m, elevation 500 m).
+  // When checking sample 2 (5000 m, low terrain, aircraft at 160 m MSL),
+  // the ridge at 1000 m (500 m elevation) blocks the line → reach = dists[0] = 50 m.
+  (function() {
+    var elevs = [100, 500, 100, 100, 100];
+    var dists = [50, 1000, 5000, 20000, 50000];
+    var r = findReachDistance(elevs, dists, 100, 1.5, 60, 915e6);
+    assert('near ridge → reach is first sample', r.reachM, 50);
+    assert('near ridge → broke at index 2', r.brokeAtSampleIdx, 2);
   })();
 
   // ── Summary ───────────────────────────────────────────────────────────────────

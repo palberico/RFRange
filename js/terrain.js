@@ -5,10 +5,11 @@
  *
  * Public API:
  *   destinationPoint(lat, lng, bearingDeg, distanceMeters) → {lat, lng}
- *   buildSampleProfile(originLat, originLng, bearingDeg, maxDistanceMeters) → Array
+ *   buildSampleProfile(originLat, originLng, bearingDeg, maxDistanceMeters) → Array (10 pts)
+ *   buildRefinementProfile(originLat, originLng, bearingDeg, nearDist, farDist) → Array (4 pts)
+ *   findReachDistance(elevations, distances, gsElevMsl, gsAntennaH, aircraftAgl, freq) → {reachM, brokeAtSampleIdx}
  *   fetchElevations(points) → Promise<Array<number>>
- *   evaluateLineOfSight(elevations, distances, gsElevationMsl, gsAntennaHeightM,
- *                       aircraftAglM, frequencyHz) → {clear, blockingDistanceM, worstClearancePercent}
+ *   evaluateLineOfSight(...) → {clear, blockingDistanceM, worstClearancePercent}  [deprecated]
  *   earthCurvatureDropM(distanceMeters) → number
  *   fresnelRadiusM(d1Meters, totalDistanceMeters, frequencyHz) → number
  */
@@ -43,34 +44,87 @@ function destinationPoint(lat, lng, bearingDeg, distanceMeters) {
 }
 
 /**
- * Build the array of sample points along a bearing from origin to maxDistance.
- * Non-uniform sampling: denser near origin (where Fresnel zones are tightest),
- * sparser at distance. Returns ~14 points per bearing (optimised to stay within
- * Open-Meteo's 100-coords-per-request limit across 36 bearings).
+ * Build 10 coarse sample points along a bearing using fractional distances.
+ * Logarithmic-ish distribution — denser near origin (tight Fresnel zones),
+ * enough resolution at range to locate LOS breaks within ~20%.
+ * Refinement pass (buildRefinementProfile) zooms in around any break found here.
+ *
+ * Note: does NOT include a distance=0 origin — the GS point is prepended
+ * separately by the caller when batching elevation requests.
  */
 function buildSampleProfile(originLat, originLng, bearingDeg, maxDistanceMeters) {
-  var distances = [0, 5, 20, 60, 150, 400];
-  var d = 400;
-  while (d < maxDistanceMeters) {
-    d = d * 1.6;
-    if (d >= maxDistanceMeters) break;
-    distances.push(Math.round(d));
+  var fractions = [0.001, 0.01, 0.04, 0.1, 0.18, 0.3, 0.45, 0.6, 0.78, 1.0];
+  return fractions.map(function(f) {
+    var dist = Math.max(20, maxDistanceMeters * f);
+    var dest = destinationPoint(originLat, originLng, bearingDeg, dist);
+    return { lat: dest.lat, lng: dest.lng, distanceMeters: dist };
+  });
+}
+
+/**
+ * Generate 4 refinement samples between two distances on a bearing.
+ * Used after a coarse pass identifies the approximate break-point to
+ * narrow down the exact LOS-break distance.
+ *
+ * @param {number} nearDist - The last clear distance (meters)
+ * @param {number} farDist  - The first blocked distance (meters)
+ * @returns {Array<{lat, lng, distanceMeters}>}
+ */
+function buildRefinementProfile(originLat, originLng, bearingDeg, nearDist, farDist) {
+  var samples = [];
+  for (var i = 1; i <= 4; i++) {
+    var dist = nearDist + (farDist - nearDist) * (i / 5);
+    var dest = destinationPoint(originLat, originLng, bearingDeg, dist);
+    samples.push({ lat: dest.lat, lng: dest.lng, distanceMeters: dist });
+  }
+  return samples;
+}
+
+/**
+ * Walk a sampled profile and return the first distance at which line-of-sight breaks.
+ *
+ * For each candidate aircraft position (sample i), checks whether any intermediate
+ * terrain sample (j < i) would obstruct the straight line from GS to aircraft,
+ * accounting for Earth curvature. If LOS holds to the end, returns full reach.
+ *
+ * Fresnel zone is intentionally omitted here — this answers "can you receive any
+ * signal" (link budget permits some obstruction), not "is this free-space quality."
+ * Use evaluateLineOfSight for the stricter 60%-Fresnel check.
+ *
+ * @param {Array<number>} elevations     - Terrain MSL elevation at each sample
+ * @param {Array<number>} distances      - Distance along profile at each sample (meters)
+ * @param {number} gsElevationMsl
+ * @param {number} gsAntennaHeightM
+ * @param {number} aircraftAglM
+ * @param {number} frequencyHz           - Kept for API symmetry; not used internally
+ * @returns {{ reachM: number, brokeAtSampleIdx: number|null }}
+ */
+function findReachDistance(elevations, distances, gsElevationMsl, gsAntennaHeightM,
+                            aircraftAglM, frequencyHz) {
+  var maxDist  = distances[distances.length - 1];
+  var gsHeight = gsElevationMsl + (gsAntennaHeightM != null ? gsAntennaHeightM : 1.5);
+
+  for (var i = 1; i < distances.length; i++) {
+    var aircraftDist = distances[i];
+    var aircraftMsl  = elevations[i] + aircraftAglM;
+
+    var blocked = false;
+    for (var j = 1; j < i; j++) {
+      var dj           = distances[j];
+      var directHeight = gsHeight + (aircraftMsl - gsHeight) * (dj / aircraftDist);
+      var requiredHeight = elevations[j] + earthCurvatureDropM(dj);
+      if (directHeight < requiredHeight) {
+        blocked = true;
+        break;
+      }
+    }
+
+    if (blocked) {
+      return { reachM: distances[i - 1], brokeAtSampleIdx: i };
+    }
   }
 
-  // Keep only distances strictly less than max, then append max
-  distances = distances.filter(function(x) { return x < maxDistanceMeters; });
-  distances.push(maxDistanceMeters);
-
-  // Deduplicate and sort
-  distances = distances.filter(function(x, i, arr) { return arr.indexOf(x) === i; });
-  distances.sort(function(a, b) { return a - b; });
-
-  return distances.map(function(dist) {
-    var pt = dist === 0
-      ? { lat: originLat, lng: originLng }
-      : destinationPoint(originLat, originLng, bearingDeg, dist);
-    return { lat: pt.lat, lng: pt.lng, distanceMeters: dist };
-  });
+  return { reachM: maxDist, brokeAtSampleIdx: null };
 }
 
 /**
@@ -79,13 +133,14 @@ function buildSampleProfile(originLat, originLng, bearingDeg, maxDistanceMeters)
  * Returns elevations in meters MSL, in the same order as input.
  */
 async function fetchElevations(points) {
-  var CHUNK_SIZE = 100;
-  var CHUNK_DELAY_MS = 400; // pace requests to stay within Open-Meteo rate limits
-  var elevations = [];
+  var CHUNK_SIZE    = 100;
+  var CHUNK_DELAY   = 1500; // ms between chunks — paces burst rate
+  var MAX_RETRIES   = 3;
+  var elevations    = [];
 
   for (var i = 0; i < points.length; i += CHUNK_SIZE) {
     if (i > 0) {
-      await new Promise(function(resolve) { setTimeout(resolve, CHUNK_DELAY_MS); });
+      await new Promise(function(resolve) { setTimeout(resolve, CHUNK_DELAY); });
     }
 
     var chunk = points.slice(i, i + CHUNK_SIZE);
@@ -94,14 +149,37 @@ async function fetchElevations(points) {
     var url   = 'https://api.open-meteo.com/v1/elevation?latitude=' + lats + '&longitude=' + lngs;
 
     var response;
-    try {
-      response = await fetch(url);
-    } catch (_) {
-      throw new Error('Could not reach elevation service. Check your connection.');
+    var retryDelay = 2000;
+
+    for (var attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        await new Promise(function(resolve) { setTimeout(resolve, retryDelay); });
+        retryDelay *= 2; // 2 s → 4 s → 8 s
+      }
+
+      try {
+        response = await fetch(url);
+      } catch (_) {
+        if (attempt === MAX_RETRIES) {
+          throw new Error('Could not reach elevation service. Check your connection.');
+        }
+        continue;
+      }
+
+      if (response.status === 429) {
+        if (attempt === MAX_RETRIES) {
+          throw new Error('Elevation API rate limited. Wait a moment and try again.');
+        }
+        continue; // back off and retry
+      }
+
+      if (!response.ok) {
+        throw new Error('Elevation API error ' + response.status + '. Try again shortly.');
+      }
+
+      break; // success — exit retry loop
     }
-    if (!response.ok) {
-      throw new Error('Elevation API error ' + response.status + '. Try again shortly.');
-    }
+
     var data = await response.json();
     if (!data.elevation || !Array.isArray(data.elevation)) {
       throw new Error('Unexpected elevation API response format');
@@ -134,6 +212,9 @@ function fresnelRadiusM(d1Meters, totalDistanceMeters, frequencyHz) {
 }
 
 /**
+ * @deprecated Use findReachDistance for per-bearing reach analysis.
+ * Kept for existing unit tests. Will be removed in a later cleanup pass.
+ *
  * Determine whether the aircraft has clear line-of-sight along a sampled profile.
  *
  * At each intermediate sample point the direct-path height (linear interpolation
