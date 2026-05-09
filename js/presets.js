@@ -70,6 +70,33 @@ const controlPresets = {
     frequencyHz: 915e6,
     rxSensitivityDbm: -120
   },
+  // RadioMaster Nomad + XR4 (Gemini Xrossband mode, stock antennas)
+  // Modeled at 900 MHz — the band that dominates for long-range
+  // Sensitivity figures = ELRS spec + ~2 dB true-diversity gain from XR4
+  rm_nomad_xr4_250_50: {
+    name: "RadioMaster Nomad + XR4 · 250mW @ 50Hz",
+    txPowerDbm: 24.0,
+    frequencyHz: 915e6,
+    rxSensitivityDbm: -122
+  },
+  rm_nomad_xr4_500_50: {
+    name: "RadioMaster Nomad + XR4 · 500mW @ 50Hz",
+    txPowerDbm: 27.0,
+    frequencyHz: 915e6,
+    rxSensitivityDbm: -122
+  },
+  rm_nomad_xr4_1w_50: {
+    name: "RadioMaster Nomad + XR4 · 1W @ 50Hz",
+    txPowerDbm: 30.0,
+    frequencyHz: 915e6,
+    rxSensitivityDbm: -122
+  },
+  rm_nomad_xr4_1w_150: {
+    name: "RadioMaster Nomad + XR4 · 1W @ 150Hz",
+    txPowerDbm: 30.0,
+    frequencyHz: 915e6,
+    rxSensitivityDbm: -114
+  },
   crossfire_1w_50: {
     name: "TBS Crossfire · 1000mW @ 50Hz",
     txPowerDbm: 30.0,
