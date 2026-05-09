@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>terrain.js tests</title>
+<style>body{font-family:monospace;background:#0f172a;color:#e2e8f0;padding:24px}
+.pass{color:#34d399}.fail{color:#f87171}.case{margin:6px 0}
+.section{margin-top:20px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:1px}</style>
+</head><body>
+<h1>terrain.js — unit tests</h1>
+<p style="color:#94a3b8;font-size:13px">fetchElevations is not tested here (requires live network). Test it manually via the integration flow.</p>
+<div id="output"></div>
+<script src="../js/terrain.js"></script>
+<script>
+  var passed = 0, failed = 0;
+  var out = document.getElementById('output');
+
+  function assert(label, actual, expected) {
+    var ok = JSON.stringify(actual) === JSON.stringify(expected);
+    var div = document.createElement('div');
+    div.className = 'case';
+    div.innerHTML = (ok ? '<span class="pass">PASS</span>' : '<span class="fail">FAIL</span>') +
+      ' — ' + label;
+    if (!ok) {
+      div.innerHTML += '<br><span style="color:#94a3b8;margin-left:16px">expected: ' + JSON.stringify(expected) + '</span>' +
+                       '<br><span style="color:#94a3b8;margin-left:16px">actual:   ' + JSON.stringify(actual) + '</span>';
+    }
+    out.appendChild(div);
+    ok ? passed++ : failed++;
+  }
+
+  // toleranceAbs: absolute tolerance in same units as value (not percent)
+  function assertClose(label, actual, expected, toleranceAbs) {
+    var diff = Math.abs(actual - expected);
+    var ok = diff <= toleranceAbs;
+    var div = document.createElement('div');
+    div.className = 'case';
+    div.innerHTML = (ok ? '<span class="pass">PASS</span>' : '<span class="fail">FAIL</span>') +
+      ' — ' + label + ' (got ' + actual.toFixed(4) + ', expected ' + expected.toFixed(4) + ' ±' + toleranceAbs + ')';
+    out.appendChild(div);
+    ok ? passed++ : failed++;
+  }
+
+  function section(title) {
+    var div = document.createElement('div');
+    div.className = 'section';
+    div.textContent = title;
+    out.appendChild(div);
+  }
+
+  // ── destinationPoint ─────────────────────────────────────────────────────────
+
+  section('destinationPoint');
+
+  // 1000 m due north from (0, 0) → lat ≈ 0.008993°, lng unchanged
+  // 1° latitude ≈ 111,111 m → 1000 m ≈ 0.008993°
+  (function() {
+    var pt = destinationPoint(0, 0, 0, 1000);
+    assertClose('1000m north: lat ≈ 0.008993°', pt.lat,  0.008993, 0.0001);
+    assertClose('1000m north: lng ≈ 0°',         pt.lng,  0,         0.0001);
+  })();
+
+  // 1000 m due east from (0, 0) at equator → lng ≈ 0.008993°, lat unchanged
+  (function() {
+    var pt = destinationPoint(0, 0, 90, 1000);
+    assertClose('1000m east: lat ≈ 0°',          pt.lat,  0,         0.0001);
+    assertClose('1000m east: lng ≈ 0.008993°',   pt.lng,  0.008993,  0.0001);
+  })();
+
+  // Round-trip: 0 distance returns origin
+  (function() {
+    var pt = destinationPoint(47.1234, -122.5678, 45, 0);
+    assertClose('zero distance: lat unchanged', pt.lat, 47.1234, 0.0001);
+    assertClose('zero distance: lng unchanged', pt.lng, -122.5678, 0.0001);
+  })();
+
+  // ── earthCurvatureDropM ───────────────────────────────────────────────────────
+
+  section('earthCurvatureDropM');
+
+  // R_eff = 8,504,000 m → drop = d² / (2 × 8,504,000)
+  // 10 km → 100,000,000 / 17,008,000 ≈ 5.88 m
+  assertClose('10 km curvature drop ≈ 5.88 m', earthCurvatureDropM(10000), 5.88, 0.05);
+
+  // 50 km → 2,500,000,000 / 17,008,000 ≈ 147.0 m
+  assertClose('50 km curvature drop ≈ 147.0 m', earthCurvatureDropM(50000), 147.0, 0.5);
+
+  // Scales quadratically: doubling distance quadruples drop
+  (function() {
+    var d1 = earthCurvatureDropM(10000);
+    var d2 = earthCurvatureDropM(20000);
+    assertClose('curvature scales quadratically (2× distance → 4× drop)', d2 / d1, 4.0, 0.01);
+  })();
+
+  // ── fresnelRadiusM ────────────────────────────────────────────────────────────
+
+  section('fresnelRadiusM — standard formula: r = sqrt(λ × d1 × d2 / (d1 + d2))');
+
+  // 915 MHz midpoint of 2 km path:
+  // λ = 3e8 / 915e6 = 0.3279 m; r = sqrt(0.3279 × 1000 × 1000 / 2000) = sqrt(163.9) ≈ 12.80 m
+  assertClose('915 MHz, d1=1000m, total=2000m ≈ 12.80 m',
+    fresnelRadiusM(1000, 2000, 915e6), 12.80, 0.05);
+
+  // 2.4 GHz midpoint of 10 km path:
+  // λ = 3e8 / 2.4e9 = 0.125 m; r = sqrt(0.125 × 5000 × 5000 / 10000) = sqrt(312.5) ≈ 17.68 m
+  assertClose('2.4 GHz, d1=5000m, total=10000m ≈ 17.68 m',
+    fresnelRadiusM(5000, 10000, 2.4e9), 17.68, 0.05);
+
+  // Returns 0 at endpoints (Fresnel zone collapses at transmitter/receiver)
+  assert('Fresnel radius at d1=0 is 0', fresnelRadiusM(0, 1000, 915e6), 0);
+  assert('Fresnel radius at endpoint (d1=total) is 0', fresnelRadiusM(1000, 1000, 915e6), 0);
+
+  // ── evaluateLineOfSight ───────────────────────────────────────────────────────
+
+  section('evaluateLineOfSight — flat terrain (should be clear)');
+
+  // GS at MSL 0 m, antenna 1.5 m AGL, aircraft 60 m AGL over flat 0 m terrain.
+  // Distances: 0–4000 m. Direct path 1.5 m → 60 m clears flat terrain easily.
+  (function() {
+    var elev = [0, 0, 0, 0, 0];
+    var dist = [0, 1000, 2000, 3000, 4000];
+    var r = evaluateLineOfSight(elev, dist, 0, 1.5, 60, 915e6);
+    assert('flat terrain: link is clear', r.clear, true);
+    assert('flat terrain: no blocking distance', r.blockingDistanceM, null);
+  })();
+
+  // Aircraft barely above terrain — 2 m AGL on flat ground with no curvature
+  // (short path so curvature is negligible, but Fresnel clearance may not be met)
+  (function() {
+    var elev = [0, 0, 0];
+    var dist = [0, 500, 1000];
+    var r = evaluateLineOfSight(elev, dist, 0, 1.5, 2, 915e6);
+    // Direct path from 1.5 m to 2 m — very low clearance over flat terrain.
+    // Whether blocked depends on Fresnel zone size; either way, worstClearancePercent
+    // should be a reasonable number (not NaN / Infinity).
+    assert('low aircraft: result is an object', typeof r.clear, 'boolean');
+    assert('low aircraft: worstClearancePercent is finite', isFinite(r.worstClearancePercent), true);
+  })();
+
+  section('evaluateLineOfSight — ridge blocking (should be blocked)');
+
+  // GS at MSL 0, aircraft 30 m AGL over flat endpoint.
+  // A 100 m ridge sits at 3000 m on a 5000 m path.
+  // Direct path at d=3000: 1.5 + (30 − 1.5) × 0.6 = 18.6 m
+  // Apparent terrain at d=3000: 100 + curvature(3000) ≈ 100.53 m
+  // 18.6 m << 100.53 m → definitely blocked
+  (function() {
+    var elev = [0, 0, 0, 100, 0, 0];
+    var dist = [0, 1000, 2000, 3000, 4000, 5000];
+    var r = evaluateLineOfSight(elev, dist, 0, 1.5, 30, 915e6);
+    assert('ridge: link is blocked', r.clear, false);
+    assert('ridge: blocking distance is at ridge (3000 m)', r.blockingDistanceM, 3000);
+    assert('ridge: worstClearancePercent is negative (below terrain)', r.worstClearancePercent < 0, true);
+  })();
+
+  // Ridge at the END of the profile (last intermediate point) — also blocked
+  (function() {
+    var elev = [0, 0, 0, 80];
+    var dist = [0, 1000, 2000, 3000];
+    // Aircraft is 10 m AGL at MSL 80 + 10 = 90 m endpoint
+    // Direct path at d=2000: 1.5 + (90 − 1.5) × (2000/3000) = 1.5 + 59 = 60.5 m
+    // Apparent terrain at d=2000: 0 + curvature(2000) ≈ 0.24 m → 60.5 >> 0.24, clear at mid
+    // Direct path at NO intermediate points blocked (only origin and endpoint excluded)
+    // This test verifies endpoint is NOT checked (only intermediates are)
+    var r = evaluateLineOfSight(elev, dist, 0, 1.5, 10, 915e6);
+    assert('endpoint ridge: only intermediates checked, so this clears', r.clear, true);
+  })();
+
+  // ── buildSampleProfile ────────────────────────────────────────────────────────
+
+  section('buildSampleProfile');
+
+  (function() {
+    var profile = buildSampleProfile(0, 0, 0, 5000);
+    assert('profile starts at distance 0', profile[0].distanceMeters, 0);
+    assert('profile ends at maxDistance', profile[profile.length - 1].distanceMeters, 5000);
+    assert('origin lat is correct', profile[0].lat, 0);
+    assert('origin lng is correct', profile[0].lng, 0);
+    assert('profile has at least 5 points', profile.length >= 5, true);
+    // First non-origin point should be close to origin (dense near-field sampling)
+    assert('second point is 5 m from origin', profile[1].distanceMeters, 5);
+  })();
+
+  (function() {
+    var profile = buildSampleProfile(0, 0, 0, 100000);
+    assert('long profile starts at 0', profile[0].distanceMeters, 0);
+    assert('long profile ends at 100 km', profile[profile.length - 1].distanceMeters, 100000);
+    // Should have roughly 25-35 points for a 100 km profile
+    assert('long profile has ~30 points (25–35)', profile.length >= 25 && profile.length <= 35, true);
+  })();
+
+  // ── Summary ───────────────────────────────────────────────────────────────────
+  out.insertAdjacentHTML('beforeend',
+    '<div style="margin-top:20px;font-weight:bold">' +
+    (failed === 0
+      ? '<span class="pass">All ' + (passed) + ' tests passed.</span>'
+      : '<span class="fail">' + failed + ' of ' + (passed + failed) + ' tests FAILED.</span>') +
+    '</div>');
+</script></body></html>

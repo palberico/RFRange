@@ -3,6 +3,7 @@ const state = {
   groundStation: null,
   units: 'imperial',
   fadeMargin: 10,
+  aircraftAltitudeM: 60.96,
   videoPreset: '',
   videoAirAntenna: '',
   videoAntenna: '',
@@ -22,6 +23,13 @@ let videoCircle = null;
 let controlCircle = null;
 let groundMarker = null;
 
+// Cached range values written by recalculate(), read by runTerrainAnalysis()
+var currentVideoRangeM   = 0;
+var currentControlRangeM = 0;
+
+// Terrain overlay polygons managed by renderTerrainOverlays / invalidateTerrainResult
+var terrainOverlays = [];
+
 // DOM Elements
 const els = {
   videoPreset: document.getElementById('videoPreset'),
@@ -32,6 +40,8 @@ const els = {
   controlAntenna: document.getElementById('controlAntenna'),
   fadeMargin: document.getElementById('fadeMargin'),
   fadeMarginValue: document.getElementById('fadeMarginValue'),
+  aircraftAltitude: document.getElementById('aircraftAltitude'),
+  aircraftAltitudeValue: document.getElementById('aircraftAltitudeValue'),
   unitsToggle: document.getElementById('unitsToggle'),
   videoRangeDisplay: document.getElementById('videoRangeDisplay'),
   controlRangeDisplay: document.getElementById('controlRangeDisplay'),
@@ -42,6 +52,8 @@ const els = {
   videoRangePeek: document.getElementById('videoRangePeek'),
   controlRangePeek: document.getElementById('controlRangePeek'),
   limitingPeek: document.getElementById('limitingPeek'),
+  computeTerrainBtn: document.getElementById('computeTerrainBtn'),
+  terrainStatus: document.getElementById('terrainStatus'),
 };
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -592,6 +604,13 @@ function applyStateToUI() {
   });
 
   syncAllCustomForms();
+  syncEnvButtons();
+
+  if (state.aircraftAltitudeM != null) {
+    var ft = Math.round(state.aircraftAltitudeM * 3.281);
+    els.aircraftAltitude.value = ft;
+    els.aircraftAltitudeValue.textContent = ft + ' ft';
+  }
 }
 
 // ── Init UI ───────────────────────────────────────────────────────────────────
@@ -619,22 +638,45 @@ function initUI() {
   initCustomForms();
 
   // Event Listeners
-  els.videoPreset.addEventListener('change',       (e) => { state.videoPreset = e.target.value; recalculate(); });
-  els.videoAirAntenna.addEventListener('change',   (e) => { state.videoAirAntenna = e.target.value; recalculate(); });
-  els.videoAntenna.addEventListener('change',      (e) => { state.videoAntenna = e.target.value; recalculate(); });
-  els.controlPreset.addEventListener('change',     (e) => { state.controlPreset = e.target.value; recalculate(); });
-  els.controlAirAntenna.addEventListener('change', (e) => { state.controlAirAntenna = e.target.value; recalculate(); });
-  els.controlAntenna.addEventListener('change',    (e) => { state.controlAntenna = e.target.value; recalculate(); });
+  els.videoPreset.addEventListener('change',       (e) => { state.videoPreset = e.target.value; invalidateTerrainResult(); recalculate(); });
+  els.videoAirAntenna.addEventListener('change',   (e) => { state.videoAirAntenna = e.target.value; invalidateTerrainResult(); recalculate(); });
+  els.videoAntenna.addEventListener('change',      (e) => { state.videoAntenna = e.target.value; invalidateTerrainResult(); recalculate(); });
+  els.controlPreset.addEventListener('change',     (e) => { state.controlPreset = e.target.value; invalidateTerrainResult(); recalculate(); });
+  els.controlAirAntenna.addEventListener('change', (e) => { state.controlAirAntenna = e.target.value; invalidateTerrainResult(); recalculate(); });
+  els.controlAntenna.addEventListener('change',    (e) => { state.controlAntenna = e.target.value; invalidateTerrainResult(); recalculate(); });
 
   els.fadeMargin.addEventListener('input', (e) => {
     state.fadeMargin = parseInt(e.target.value, 10);
     els.fadeMarginValue.textContent = `${state.fadeMargin} dB`;
+    syncEnvButtons();
+    invalidateTerrainResult();
     recalculate();
+  });
+
+  document.querySelectorAll('.env-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var fade = parseInt(btn.getAttribute('data-fade'), 10);
+      state.fadeMargin = fade;
+      els.fadeMargin.value = fade;
+      els.fadeMarginValue.textContent = fade + ' dB';
+      syncEnvButtons();
+      invalidateTerrainResult();
+      recalculate();
+    });
   });
 
   els.unitsToggle.addEventListener('change', (e) => {
     state.units = e.target.checked ? 'imperial' : 'metric';
     recalculate();
+  });
+
+  els.aircraftAltitude.addEventListener('input', function(e) {
+    var ft = parseInt(e.target.value, 10);
+    state.aircraftAltitudeM = ft / 3.281;
+    els.aircraftAltitudeValue.textContent = ft + ' ft';
+    saveLastState(state);
+    updateHash();
+    invalidateTerrainResult();
   });
 
   var shareBtn       = document.getElementById('shareBtn');
@@ -735,6 +777,7 @@ function initMap() {
       groundMarker.setLatLng(state.groundStation);
     }
 
+    invalidateTerrainResult();
     recalculate();
     fitMapToCircles();
     offerSaveLocation(e.latlng.lat, e.latlng.lng);
@@ -742,6 +785,148 @@ function initMap() {
 }
 
 // ── Calculate ─────────────────────────────────────────────────────────────────
+
+function showTerrainStatus(statusStr, message) {
+  els.terrainStatus.setAttribute('data-state', statusStr);
+  els.terrainStatus.textContent = message;
+}
+
+function setTerrainBtnLoading(loading) {
+  els.computeTerrainBtn.disabled = loading;
+  els.computeTerrainBtn.innerHTML = loading
+    ? '<span class="btn-spinner" aria-hidden="true"></span>Computing…'
+    : 'Compute Terrain';
+  var mobileBtn = document.getElementById('mobileTerrainBtn');
+  if (mobileBtn) mobileBtn.disabled = loading;
+}
+
+function invalidateTerrainResult() {
+  terrainOverlays.forEach(function(o) { map.removeLayer(o); });
+  terrainOverlays = [];
+  showTerrainStatus('idle', 'Click to analyze line-of-sight');
+}
+
+function renderTerrainOverlays(profiles, blockedBearings, maxRangeM) {
+  terrainOverlays.forEach(function(o) { map.removeLayer(o); });
+  terrainOverlays = [];
+
+  blockedBearings.forEach(function(p) {
+    var halfWidth  = 5;
+    var blockDist  = p.los.blockingDistanceM || maxRangeM;
+    var points     = [[state.groundStation.lat, state.groundStation.lng]];
+
+    for (var bb = p.bearing - halfWidth; bb <= p.bearing + halfWidth; bb += 0.5) {
+      var dest = destinationPoint(state.groundStation.lat, state.groundStation.lng, bb, blockDist);
+      points.push([dest.lat, dest.lng]);
+    }
+    points.push([state.groundStation.lat, state.groundStation.lng]);
+
+    var polygon = L.polygon(points, {
+      color: '#ef4444',
+      weight: 1,
+      fillColor: '#ef4444',
+      fillOpacity: 0.25,
+      interactive: false
+    }).addTo(map);
+    terrainOverlays.push(polygon);
+  });
+}
+
+// In-memory cache keyed by "lat,lng,maxRange" — cleared on page reload
+var elevationCache = {};
+
+function elevationCacheKey(lat, lng, maxRangeM) {
+  return lat.toFixed(4) + ',' + lng.toFixed(4) + ',' + Math.round(maxRangeM);
+}
+
+async function runTerrainAnalysis() {
+  var maxRangeM = Math.min(currentVideoRangeM, currentControlRangeM);
+  if (!isFinite(maxRangeM) || maxRangeM <= 0) {
+    showTerrainStatus('error', 'Configure hardware first');
+    return;
+  }
+
+  var limitingFreq = currentVideoRangeM < currentControlRangeM
+    ? videoPresets[state.videoPreset].frequencyHz
+    : controlPresets[state.controlPreset].frequencyHz;
+
+  setTerrainBtnLoading(true);
+  showTerrainStatus('computing', 'Sampling 36 bearings…');
+
+  try {
+    var cacheKey = elevationCacheKey(state.groundStation.lat, state.groundStation.lng, maxRangeM);
+    var cached   = elevationCache[cacheKey];
+
+    var gsElev, allElevations, profiles;
+
+    var bearings = [];
+    for (var b = 0; b < 360; b += 10) bearings.push(b);
+
+    profiles = bearings.map(function(b) {
+      return {
+        bearing: b,
+        samples: buildSampleProfile(state.groundStation.lat, state.groundStation.lng, b, maxRangeM)
+      };
+    });
+
+    if (cached) {
+      gsElev        = cached.gsElev;
+      allElevations = cached.allElevations;
+    } else {
+      gsElev = (await fetchElevations([{
+        lat: state.groundStation.lat,
+        lng: state.groundStation.lng
+      }]))[0];
+
+      var allPoints = [];
+      profiles.forEach(function(p) {
+        p.samples.forEach(function(s) { allPoints.push({ lat: s.lat, lng: s.lng }); });
+      });
+
+      showTerrainStatus('computing', 'Fetching elevation data…');
+      allElevations = await fetchElevations(allPoints);
+
+      elevationCache[cacheKey] = { gsElev: gsElev, allElevations: allElevations };
+    }
+
+    var idx = 0;
+    profiles.forEach(function(p) {
+      p.elevations = p.samples.map(function() { return allElevations[idx++]; });
+    });
+
+    showTerrainStatus('computing', 'Evaluating line-of-sight…');
+    var blockedBearings = [];
+    profiles.forEach(function(p) {
+      var distances = p.samples.map(function(s) { return s.distanceMeters; });
+      var result = evaluateLineOfSight(
+        p.elevations, distances,
+        gsElev, 1.5,
+        state.aircraftAltitudeM, limitingFreq
+      );
+      p.los = result;
+      if (!result.clear) blockedBearings.push(p);
+    });
+
+    renderTerrainOverlays(profiles, blockedBearings, maxRangeM);
+    var blockedPercent = Math.round(100 * blockedBearings.length / profiles.length);
+    showTerrainStatus('done', blockedPercent + '% of bearings blocked');
+
+  } catch (err) {
+    console.error('[fpv] terrain analysis failed:', err);
+    var errMsg = err.message || 'Analysis failed — check connection';
+    showTerrainStatus('error', errMsg);
+    showToast(errMsg, { error: true });
+  } finally {
+    setTerrainBtnLoading(false);
+  }
+}
+
+function syncEnvButtons() {
+  var fade = state.fadeMargin;
+  document.querySelectorAll('.env-btn').forEach(function(btn) {
+    btn.classList.toggle('active', parseInt(btn.getAttribute('data-fade'), 10) === fade);
+  });
+}
 
 function clearReadouts() {
   els.videoRangeDisplay.innerHTML   = '--';
@@ -765,6 +950,7 @@ function recalculate() {
 
   // A custom dropdown is selected but the form isn't filled yet, or no selection made
   if (!vLink || !vAirAnt || !vAnt || !cLink || !cAirAnt || !cAnt) {
+    currentVideoRangeM = currentControlRangeM = 0;
     clearReadouts();
     if (state.groundStation && map) {
       if (videoCircle)   { map.removeLayer(videoCircle);   videoCircle = null; }
@@ -777,6 +963,8 @@ function recalculate() {
 
   const videoRangeMeters   = calculateMaxRangeMeters(vLink, vAirAnt.gainDbi, vAnt.gainDbi, state.fadeMargin);
   const controlRangeMeters = calculateMaxRangeMeters(cLink, cAirAnt.gainDbi, cAnt.gainDbi, state.fadeMargin);
+  currentVideoRangeM   = videoRangeMeters;
+  currentControlRangeM = controlRangeMeters;
 
   const vFormatted = formatRange(videoRangeMeters, state.units);
   const cFormatted = formatRange(controlRangeMeters, state.units);
@@ -1310,6 +1498,19 @@ document.addEventListener('DOMContentLoaded', () => {
   initCollapsibleSections();
   initInfoTooltip(document.getElementById('videoRangeInfoBtn'),   document.getElementById('videoRangeTooltip'));
   initInfoTooltip(document.getElementById('controlRangeInfoBtn'), document.getElementById('controlRangeTooltip'));
+  initInfoTooltip(document.getElementById('altitudeInfoBtn'),     document.getElementById('altitudeTooltip'));
+
+  function handleTerrainClick() {
+    if (!state.groundStation) {
+      showToast('Set a ground station first', { error: true });
+      return;
+    }
+    runTerrainAnalysis();
+  }
+
+  els.computeTerrainBtn.addEventListener('click', handleTerrainClick);
+  var mobileTerrainBtn = document.getElementById('mobileTerrainBtn');
+  if (mobileTerrainBtn) mobileTerrainBtn.addEventListener('click', handleTerrainClick);
   initProfiles();
   initRecentLocations();
   initDataActions();

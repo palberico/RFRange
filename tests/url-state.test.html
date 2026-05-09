@@ -208,6 +208,13 @@
   assert('selected videoAirAntenna kept', h15.indexOf('va=axii_micro') !== -1, true);
   showHash('T15', h15);
 
+  // ── Test 16: aircraftAltitudeM round-trips ───────────────────────────────
+  var altState = Object.assign({}, defaultState, { aircraftAltitudeM: 91.4 });
+  var h16 = encodeStateToHash(altState);
+  assertHashContains('aircraftAltitudeM encodes as a=91.4', h16, 'a=91.4');
+  var d16 = decodeHashToState(h16);
+  assert('aircraftAltitudeM round-trips', d16.aircraftAltitudeM, 91.4);
+
   // ── Summary ───────────────────────────────────────────────────────────────
   var summary = document.createElement('div');
   summary.className = 'summary';

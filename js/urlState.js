@@ -21,7 +21,8 @@ const FIELD_TO_KEY = {
   controlAirAntenna: 'ca',
   controlAntenna:    'cga',
   fadeMargin:        'fm',
-  units:             'u'
+  units:             'u',
+  aircraftAltitudeM: 'a'
 };
 
 const KEY_TO_FIELD = {};
@@ -50,6 +51,11 @@ function encodeStateToHash(state) {
     // units stored internally as 'metric'/'imperial', encode as 'm'/'i'
     if (field === 'units') {
       value = value === 'metric' ? 'm' : 'i';
+    }
+
+    // altitude is a float — round to 1 decimal place to keep URLs clean
+    if (field === 'aircraftAltitudeM') {
+      value = parseFloat(parseFloat(value).toFixed(1));
     }
 
     parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
@@ -118,6 +124,9 @@ function decodeHashToState(hash) {
         } else if (fieldName === 'fadeMargin') {
           var n = parseInt(value, 10);
           if (!isNaN(n)) result[fieldName] = n;
+        } else if (fieldName === 'aircraftAltitudeM') {
+          var a = parseFloat(value);
+          if (!isNaN(a)) result[fieldName] = a;
         } else {
           // Preset and antenna keys: pass through as-is.
           // Values starting with "custom:" carry inline custom hardware params.
