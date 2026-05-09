@@ -24,6 +24,22 @@ const videoPresets = {
     frequencyHz: 5.8e9,
     rxSensitivityDbm: -98
   },
+  // DJI Mini 5 Pro — OcuSync 4+
+  // Note: not available in the US market as of 2025 launch
+  // Frequencies auto-switch between 2.4 and 5.8 GHz; modeled at 5.8 GHz
+  // Sensitivity estimated from DJI's 20km FCC range claim — official figures unpublished
+  dji_mini5_pro_o4plus: {
+    name: "DJI Mini 5 Pro · O4+ (FCC)",
+    txPowerDbm: 30.0,
+    frequencyHz: 5.8e9,
+    rxSensitivityDbm: -100
+  },
+  dji_mini5_pro_o4plus_ce: {
+    name: "DJI Mini 5 Pro · O4+ (CE/EU)",
+    txPowerDbm: 14.0,
+    frequencyHz: 5.8e9,
+    rxSensitivityDbm: -100
+  },
   hdzero_race_v3_1w: {
     name: "HDZero Race v3 · 1000mW",
     txPowerDbm: 30.0,
@@ -102,6 +118,22 @@ const controlPresets = {
     txPowerDbm: 30.0,
     frequencyHz: 915e6,
     rxSensitivityDbm: -130  // LoRa @ 50Hz, community-validated
+  },
+  // DJI Mini 5 Pro — OcuSync 4+ control uplink (RC 2 → drone)
+  // Note: OcuSync uses a single bidirectional RF channel for both video and
+  // control. This preset models the uplink half. For most range planning,
+  // the downlink (video preset) is the limiting factor and matches this anyway.
+  dji_mini5_pro_o4plus_control: {
+    name: "DJI Mini 5 Pro · O4+ Control (FCC)",
+    txPowerDbm: 30.0,
+    frequencyHz: 5.8e9,
+    rxSensitivityDbm: -100
+  },
+  dji_mini5_pro_o4plus_control_ce: {
+    name: "DJI Mini 5 Pro · O4+ Control (CE/EU)",
+    txPowerDbm: 14.0,
+    frequencyHz: 5.8e9,
+    rxSensitivityDbm: -100
   }
 };
 
