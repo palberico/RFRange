@@ -111,56 +111,90 @@
       </header>
 
       <div class="scrollable-content">
-        <section class="controls-section">
-          <h2>Profiles</h2>
-          <div class="input-group">
-            <select id="profileSelect"></select>
-          </div>
-          <div class="profile-buttons">
-            <button class="btn btn-secondary" id="saveProfileBtn" disabled>Save As…</button>
-            <button class="btn btn-secondary" id="deleteProfileBtn" disabled>Delete</button>
-          </div>
-        </section>
-
-        <section class="controls-section video-section">
-          <h2>Video Link</h2>
-          <div class="input-group">
-            <label for="videoPreset">Hardware</label>
-            <select id="videoPreset"></select>
-          </div>
-          <div class="input-group">
-            <label for="videoAirAntenna">Air Antenna</label>
-            <select id="videoAirAntenna"></select>
-          </div>
-          <div class="input-group">
-            <label for="videoAntenna">Ground Antenna</label>
-            <select id="videoAntenna"></select>
+        <section class="controls-section collapsed" data-section="profiles">
+          <h2>
+            <button class="section-toggle" aria-expanded="false">
+              Profiles
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </h2>
+          <div class="section-body">
+            <div class="input-group">
+              <select id="profileSelect"></select>
+            </div>
+            <div class="profile-buttons">
+              <button class="btn btn-secondary" id="saveProfileBtn" disabled>Save As…</button>
+              <button class="btn btn-secondary" id="deleteProfileBtn" disabled>Delete</button>
+            </div>
           </div>
         </section>
 
-        <section class="controls-section control-section">
-          <h2>Control Link</h2>
-          <div class="input-group">
-            <label for="controlPreset">Hardware</label>
-            <select id="controlPreset"></select>
-          </div>
-          <div class="input-group">
-            <label for="controlAirAntenna">Air Antenna</label>
-            <select id="controlAirAntenna"></select>
-          </div>
-          <div class="input-group">
-            <label for="controlAntenna">Ground Antenna</label>
-            <select id="controlAntenna"></select>
+        <section class="controls-section video-section collapsed" data-section="video">
+          <h2>
+            <button class="section-toggle" aria-expanded="false">
+              Video Link
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </h2>
+          <div class="section-body">
+            <div class="input-group">
+              <label for="videoPreset">Hardware</label>
+              <select id="videoPreset"></select>
+            </div>
+            <div class="input-group">
+              <label for="videoAirAntenna">Air Antenna</label>
+              <select id="videoAirAntenna"></select>
+            </div>
+            <div class="input-group">
+              <label for="videoAntenna">Ground Antenna</label>
+              <select id="videoAntenna"></select>
+            </div>
           </div>
         </section>
 
-        <section class="controls-section">
-          <h2>Recent Locations</h2>
-          <div id="recentLocationsList" class="recent-locations-list"></div>
+        <section class="controls-section control-section collapsed" data-section="control">
+          <h2>
+            <button class="section-toggle" aria-expanded="false">
+              Control Link
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </h2>
+          <div class="section-body">
+            <div class="input-group">
+              <label for="controlPreset">Hardware</label>
+              <select id="controlPreset"></select>
+            </div>
+            <div class="input-group">
+              <label for="controlAirAntenna">Air Antenna</label>
+              <select id="controlAirAntenna"></select>
+            </div>
+            <div class="input-group">
+              <label for="controlAntenna">Ground Antenna</label>
+              <select id="controlAntenna"></select>
+            </div>
+          </div>
         </section>
 
-        <section class="controls-section global-section">
-          <h2>Environment</h2>
+        <section class="controls-section collapsed" data-section="locations">
+          <h2>
+            <button class="section-toggle" aria-expanded="false">
+              Recent Locations
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </h2>
+          <div class="section-body">
+            <div id="recentLocationsList" class="recent-locations-list"></div>
+          </div>
+        </section>
+
+        <section class="controls-section global-section collapsed" data-section="environment">
+          <h2>
+            <button class="section-toggle" aria-expanded="false">
+              Environment
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </h2>
+          <div class="section-body">
           <div class="input-group slider-group">
             <div class="label-row">
               <div class="label-info-group">
@@ -197,6 +231,7 @@
                 <span class="imperial">Imperial</span>
               </label>
             </div>
+          </div>
           </div>
         </section>
 
