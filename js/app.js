@@ -46,6 +46,30 @@ const els = {
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 
+function initInfoTooltip(btn, tip) {
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var isOpen = tip.classList.contains('visible');
+    tip.classList.toggle('visible', !isOpen);
+    tip.setAttribute('aria-hidden', isOpen ? 'true' : 'false');
+    btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+  });
+
+  document.addEventListener('click', function() {
+    tip.classList.remove('visible');
+    tip.setAttribute('aria-hidden', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      tip.classList.remove('visible');
+      tip.setAttribute('aria-hidden', 'true');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
+}
+
 function initFadeMarginTooltip() {
   const btn = els.fadeMarginInfoBtn;
   const tip = els.fadeMarginTooltip;
@@ -1284,6 +1308,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initDesktopPanelToggle();
   initCollapsibleSections();
+  initInfoTooltip(document.getElementById('videoRangeInfoBtn'),   document.getElementById('videoRangeTooltip'));
+  initInfoTooltip(document.getElementById('controlRangeInfoBtn'), document.getElementById('controlRangeTooltip'));
   initProfiles();
   initRecentLocations();
   initDataActions();

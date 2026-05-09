@@ -240,11 +240,37 @@
 
         <section class="results-section">
           <div class="result-card video-result">
-            <div class="result-label">Video Max Range</div>
+            <div class="result-card-header">
+              <div class="result-label">Video Max Range</div>
+              <button class="info-btn" id="videoRangeInfoBtn" aria-label="About range estimates" aria-expanded="false" aria-controls="videoRangeTooltip">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <circle cx="7" cy="7" r="6.25" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M7 6.5v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <circle cx="7" cy="4" r="0.75" fill="currentColor"/>
+                </svg>
+              </button>
+              <div class="info-tooltip info-tooltip--below" id="videoRangeTooltip" role="tooltip" aria-hidden="true">
+                <p class="tooltip-title">About These Estimates</p>
+                <p>Theoretical free-space calculations. Real-world range is reduced by terrain, foliage, interference, and antenna patterns.</p>
+              </div>
+            </div>
             <div class="result-value" id="videoRangeDisplay">--</div>
           </div>
           <div class="result-card control-result">
-            <div class="result-label">Control Max Range</div>
+            <div class="result-card-header">
+              <div class="result-label">Control Max Range</div>
+              <button class="info-btn" id="controlRangeInfoBtn" aria-label="About range estimates" aria-expanded="false" aria-controls="controlRangeTooltip">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <circle cx="7" cy="7" r="6.25" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M7 6.5v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <circle cx="7" cy="4" r="0.75" fill="currentColor"/>
+                </svg>
+              </button>
+              <div class="info-tooltip info-tooltip--below" id="controlRangeTooltip" role="tooltip" aria-hidden="true">
+                <p class="tooltip-title">About These Estimates</p>
+                <p>Theoretical free-space calculations. Real-world range is reduced by terrain, foliage, interference, and antenna patterns.</p>
+              </div>
+            </div>
             <div class="result-value" id="controlRangeDisplay">--</div>
           </div>
           <div class="limiting-factor" id="limitingFactorDisplay">
@@ -254,7 +280,6 @@
       </div>
 
       <footer>
-        <p class="disclaimer">Estimates are theoretical free-space calculations. Real-world range is reduced by terrain, foliage, interference, and antenna patterns.</p>
         <div class="data-actions">
           <button class="btn btn-sm btn-secondary" id="exportBtn">Export Data</button>
           <label class="btn btn-sm btn-secondary">
