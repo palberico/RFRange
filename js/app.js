@@ -76,6 +76,7 @@ function initFadeMarginTooltip() {
 // ── Panel toggle ──────────────────────────────────────────────────────────────
 
 const PANEL_STATE_KEY = 'fpv_panel_state';
+var SECTION_STATE_KEY = 'fpv_section_states';
 
 function initPanelToggle() {
   const panel = document.querySelector('.ui-panel');
@@ -232,6 +233,12 @@ function expandCustomFromHash(decoded) {
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
 function showToast(message, options) {
+  // Remove any existing toast so rapid calls don't pile up
+  var existing = document.querySelector('.toast');
+  if (existing && existing.parentNode) {
+    existing.parentNode.removeChild(existing);
+  }
+
   var toast = document.createElement('div');
   toast.className = 'toast' + (options && options.error ? ' error' : '');
   toast.textContent = message;
@@ -256,7 +263,12 @@ function handleShare() {
   // Use native share sheet only on touch devices; desktop always copies to clipboard.
   if (navigator.maxTouchPoints > 0 && navigator.share) {
     navigator.share({ title: 'FPV Link Budget -- my setup', url: url })
-      .catch(function() { copyUrlToClipboard(url); });
+      .catch(function(err) {
+        // User cancelled the share sheet — do nothing
+        if (err && err.name === 'AbortError') return;
+        // Real failure — fall back to clipboard
+        copyUrlToClipboard(url);
+      });
     return;
   }
   copyUrlToClipboard(url);
@@ -291,13 +303,27 @@ function execCommandCopy(url) {
 // ── Custom hardware forms ─────────────────────────────────────────────────────
 
 function validateCustomInput(input, min, max) {
-  var val = parseFloat(input.value);
   var error = input.parentElement.querySelector('.field-error');
-  if (input.value === '' || isNaN(val) || val < min || val > max) {
-    if (error) { error.textContent = 'Enter ' + min + ' – ' + max; error.classList.add('visible'); }
+
+  // Empty input: treat as "not yet filled" — don't flag as invalid,
+  // don't show an error message. Calling code handles the "form not ready"
+  // case via the false return value.
+  if (input.value === '') {
+    if (error) error.classList.remove('visible');
+    input.classList.remove('invalid');
+    return false;
+  }
+
+  var val = parseFloat(input.value);
+  if (isNaN(val) || val < min || val > max) {
+    if (error) {
+      error.textContent = 'Enter ' + min + ' – ' + max;
+      error.classList.add('visible');
+    }
     input.classList.add('invalid');
     return false;
   }
+
   if (error) error.classList.remove('visible');
   input.classList.remove('invalid');
   return true;
@@ -340,10 +366,15 @@ function readCustomPresetForm(formEl) {
   var txInput  = formEl.querySelector('[id$="_txPowerDbm"]');
   var frqInput = formEl.querySelector('[id$="_frequencyMhz"]');
   var rxInput  = formEl.querySelector('[id$="_rxSensitivityDbm"]');
-  var ok = validateCustomInput(txInput, 0, 40)
-         & validateCustomInput(frqInput, 100, 6000)
-         & validateCustomInput(rxInput, -150, 0);
-  if (!ok) return null;
+
+  // Run all three validators (no short-circuit) so every invalid field
+  // surfaces its own error message.
+  var txOk  = validateCustomInput(txInput, 0, 40);
+  var frqOk = validateCustomInput(frqInput, 100, 6000);
+  var rxOk  = validateCustomInput(rxInput, -150, 0);
+
+  if (!txOk || !frqOk || !rxOk) return null;
+
   return {
     txPowerDbm:       parseFloat(txInput.value),
     frequencyHz:      parseFloat(frqInput.value) * 1e6,
@@ -487,10 +518,25 @@ function populateDropdown(selectEl, data) {
 }
 
 function updateSaveProfileBtn() {
-  var ready = state.videoPreset && state.videoAirAntenna && state.videoAntenna &&
-              state.controlPreset && state.controlAirAntenna && state.controlAntenna;
+  var basicReady =
+    state.videoPreset       && state.videoAirAntenna   && state.videoAntenna &&
+    state.controlPreset     && state.controlAirAntenna && state.controlAntenna;
+
+  // If a field is set to 'custom', its companion custom object must be filled
+  var customPairs = [
+    ['videoPreset',       'customVideoPreset'],
+    ['videoAirAntenna',   'customVideoAirAntenna'],
+    ['videoAntenna',      'customVideoAntenna'],
+    ['controlPreset',     'customControlPreset'],
+    ['controlAirAntenna', 'customControlAirAntenna'],
+    ['controlAntenna',    'customControlAntenna'],
+  ];
+  var customsReady = customPairs.every(function(pair) {
+    return state[pair[0]] !== 'custom' || state[pair[1]] != null;
+  });
+
   var btn = document.getElementById('saveProfileBtn');
-  if (btn) btn.disabled = !ready;
+  if (btn) btn.disabled = !(basicReady && customsReady);
 }
 
 // ── Apply state to UI ─────────────────────────────────────────────────────────
@@ -673,6 +719,16 @@ function initMap() {
 
 // ── Calculate ─────────────────────────────────────────────────────────────────
 
+function clearReadouts() {
+  els.videoRangeDisplay.innerHTML   = '--';
+  els.controlRangeDisplay.innerHTML = '--';
+  els.limitingFactorDisplay.innerHTML = 'Limiting Factor: <span class="highlight">--</span>';
+  els.videoRangePeek.textContent   = '--';
+  els.controlRangePeek.textContent = '--';
+  els.limitingPeek.textContent     = '--';
+  els.limitingPeek.style.color     = '';
+}
+
 function recalculate() {
   updateSaveProfileBtn();
 
@@ -683,9 +739,15 @@ function recalculate() {
   const cAirAnt = state.controlAirAntenna === 'custom' ? state.customControlAirAntenna : controlAirAntennas[state.controlAirAntenna];
   const cAnt    = state.controlAntenna    === 'custom' ? state.customControlAntenna    : controlAntennas[state.controlAntenna];
 
-  // A custom dropdown is selected but the form isn't filled yet
+  // A custom dropdown is selected but the form isn't filled yet, or no selection made
   if (!vLink || !vAirAnt || !vAnt || !cLink || !cAirAnt || !cAnt) {
+    clearReadouts();
+    if (state.groundStation && map) {
+      if (videoCircle)   { map.removeLayer(videoCircle);   videoCircle = null; }
+      if (controlCircle) { map.removeLayer(controlCircle); controlCircle = null; }
+    }
     updateHash();
+    saveLastState(state);
     return;
   }
 
@@ -1022,10 +1084,23 @@ function renderRecentLocations() {
 }
 
 function offerSaveLocation(lat, lng) {
-  var tooClose = recentLocations.some(function(loc) {
-    return haversineMeters(lat, lng, loc.lat, loc.lng) < 500;
-  });
-  if (tooClose) return;
+  // If we already have a location within 500m, promote it to the top instead
+  // of prompting the user to add a duplicate.
+  var nearbyIdx = -1;
+  for (var i = 0; i < recentLocations.length; i++) {
+    if (haversineMeters(lat, lng, recentLocations[i].lat, recentLocations[i].lng) < 500) {
+      nearbyIdx = i;
+      break;
+    }
+  }
+  if (nearbyIdx !== -1) {
+    if (nearbyIdx === 0) return; // already at the top, nothing to do
+    var existing = recentLocations.splice(nearbyIdx, 1)[0];
+    recentLocations.unshift(existing);
+    saveRecentLocations(recentLocations);
+    renderRecentLocations();
+    return;
+  }
 
   showModal(
     'Save this location?',
@@ -1134,6 +1209,43 @@ function initDataActions() {
   });
 }
 
+// ── Collapsible sections ──────────────────────────────────────────────────────
+
+function initCollapsibleSections() {
+  var saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(SECTION_STATE_KEY)) || {};
+  } catch (_) {
+    saved = {};
+  }
+
+  var sections = document.querySelectorAll('.controls-section[data-section]');
+  sections.forEach(function(section) {
+    var key = section.getAttribute('data-section');
+    var btn = section.querySelector('.section-toggle');
+    if (!btn) return;
+
+    // Default: collapsed (true). Only expand if saved state explicitly says false.
+    var isCollapsed = saved[key] !== false;
+    section.classList.toggle('collapsed', isCollapsed);
+    btn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+
+    btn.addEventListener('click', function() {
+      var nowCollapsed = section.classList.toggle('collapsed');
+      btn.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
+
+      var current;
+      try {
+        current = JSON.parse(localStorage.getItem(SECTION_STATE_KEY)) || {};
+      } catch (_) {
+        current = {};
+      }
+      current[key] = nowCollapsed;
+      localStorage.setItem(SECTION_STATE_KEY, JSON.stringify(current));
+    });
+  });
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1171,6 +1283,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   initDesktopPanelToggle();
+  initCollapsibleSections();
   initProfiles();
   initRecentLocations();
   initDataActions();
