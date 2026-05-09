@@ -214,6 +214,57 @@ h2 {
   box-shadow: 0 0 10px var(--control-color);
 }
 
+/* ── Collapsible sections ────────────────────────────────────────────────── */
+
+.section-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-family: inherit;
+  gap: 8px;
+}
+
+.section-toggle:hover {
+  color: #e2e8f0;
+}
+
+.section-toggle .chevron {
+  flex-shrink: 0;
+  transition: transform 0.25s ease;
+  transform: rotate(-90deg);
+}
+
+.controls-section:not(.collapsed) .section-toggle .chevron {
+  transform: rotate(0deg);
+}
+
+.section-body {
+  max-height: 800px;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.controls-section.collapsed .section-body {
+  max-height: 0;
+}
+
+.controls-section.collapsed h2 {
+  margin-bottom: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 .input-group {
   margin-bottom: 16px;
   display: flex;
