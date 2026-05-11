@@ -1464,6 +1464,10 @@ footer {
     outline: none;
   }
 
+  .desktop-action-bar {
+    display: none;
+  }
+
   /* Locate button state classes (added/removed by locateUser()) */
   .mobile-locate-btn.locating {
     color: var(--accent);
