@@ -163,7 +163,11 @@ header {
 
 .desktop-locate-btn.locating {
   color: var(--accent);
+}
+
+.desktop-locate-btn.locating svg {
   animation: spin 1s linear infinite;
+  transform-origin: center;
 }
 
 .desktop-locate-btn.locate-success {
@@ -1463,7 +1467,11 @@ footer {
   /* Locate button state classes (added/removed by locateUser()) */
   .mobile-locate-btn.locating {
     color: var(--accent);
+  }
+
+  .mobile-locate-btn.locating svg {
     animation: spin 1s linear infinite;
+    transform-origin: center;
   }
 
   .mobile-locate-btn.locate-success {
