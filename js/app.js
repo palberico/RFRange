@@ -173,7 +173,7 @@ function initPanelToggle() {
     const delta = dragStartY - e.touches[0].clientY;
     if (Math.abs(delta) > 5) didDrag = true;
     const expandedH = Math.round(window.innerHeight * 0.6);
-    const collapsedH = 120;
+    const collapsedH = 148;
     const newH = Math.max(collapsedH, Math.min(expandedH, dragStartHeight + delta));
     panel.style.height = newH + 'px';
   }, { passive: true });
