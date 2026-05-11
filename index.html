@@ -46,14 +46,6 @@
         </div>
       </button>
       <div class="mobile-action-bar">
-        <button class="mobile-action-btn" id="mobileShareBtn" aria-label="Share this configuration">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-            <polyline points="16 6 12 2 8 6"/>
-            <line x1="12" y1="2" x2="12" y2="15"/>
-          </svg>
-          <span>Share</span>
-        </button>
         <button class="mobile-action-btn mobile-locate-btn" id="mobileLocateBtn" aria-label="Center on my location">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="4"/>
@@ -63,6 +55,14 @@
             <line x1="18" y1="12" x2="22" y2="12"/>
           </svg>
           <span>Locate</span>
+        </button>
+        <button class="mobile-action-btn" id="mobileShareBtn" aria-label="Share this configuration">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+            <polyline points="16 6 12 2 8 6"/>
+            <line x1="12" y1="2" x2="12" y2="15"/>
+          </svg>
+          <span>Share</span>
         </button>
         <button class="mobile-action-btn" id="mobileExportBtn" aria-label="Export data">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -109,6 +109,16 @@
       </header>
 
       <div class="desktop-action-bar">
+        <button class="desktop-action-btn desktop-locate-btn" id="desktopLocateBtn" aria-label="Center on my location">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <line x1="12" y1="2" x2="12" y2="6"/>
+            <line x1="12" y1="18" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="6" y2="12"/>
+            <line x1="18" y1="12" x2="22" y2="12"/>
+          </svg>
+          <span>Locate</span>
+        </button>
         <button class="desktop-action-btn" id="shareBtn" aria-label="Share this configuration">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
@@ -134,19 +144,6 @@
           <span>Import</span>
           <input type="file" id="importInput" accept=".json" style="display:none">
         </label>
-      </div>
-
-      <div class="units-bar">
-        <div class="toggle-group">
-          <label>Units</label>
-          <div class="toggle">
-            <input type="checkbox" id="unitsToggle" class="toggle-checkbox">
-            <label for="unitsToggle" class="toggle-label">
-              <span class="metric">Metric</span>
-              <span class="imperial">Imperial</span>
-            </label>
-          </div>
-        </div>
       </div>
 
       <div class="scrollable-content">
@@ -342,12 +339,23 @@
       </div>
 
       <footer>
-        <p class="about-link-row">
-          <a href="about.html" class="about-link">About this tool · how the math works</a>
-        </p>
-        <p class="about-link-row">
-          <a href="mailto:palberico@yahoo.com" class="about-link">Contact · palberico@yahoo.com</a>
-        </p>
+        <nav class="footer-icon-bar" aria-label="Footer">
+          <a href="about.html" class="footer-icon-btn" aria-label="About this tool">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 16v-4"/>
+              <path d="M12 8h.01"/>
+            </svg>
+            <span>About</span>
+          </a>
+          <button class="footer-icon-btn" id="settingsBtn" type="button" aria-label="Open settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <span>Settings</span>
+          </button>
+        </nav>
       </footer>
     </div>
 

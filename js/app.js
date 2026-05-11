@@ -42,7 +42,6 @@ const els = {
   fadeMarginValue: document.getElementById('fadeMarginValue'),
   aircraftAltitude: document.getElementById('aircraftAltitude'),
   aircraftAltitudeValue: document.getElementById('aircraftAltitudeValue'),
-  unitsToggle: document.getElementById('unitsToggle'),
   videoRangeDisplay: document.getElementById('videoRangeDisplay'),
   controlRangeDisplay: document.getElementById('controlRangeDisplay'),
   limitingFactorDisplay: document.getElementById('limitingFactorDisplay'),
@@ -611,7 +610,6 @@ function applyStateToUI() {
   els.controlAntenna.value    = state.controlAntenna;
   els.fadeMargin.value        = state.fadeMargin;
   els.fadeMarginValue.textContent = state.fadeMargin + ' dB';
-  els.unitsToggle.checked     = state.units === 'imperial';
 
   var customFormMap = [
     { formId: 'customVideoPresetForm',       customKey: 'customVideoPreset',       isPreset: true  },
@@ -657,7 +655,6 @@ function initUI() {
   els.controlAntenna.value    = state.controlAntenna;
   els.fadeMargin.value        = state.fadeMargin;
   els.fadeMarginValue.textContent = `${state.fadeMargin} dB`;
-  els.unitsToggle.checked     = state.units === 'imperial';
 
   // Add "Custom…" options and wire custom form listeners
   initCustomForms();
@@ -688,11 +685,6 @@ function initUI() {
       invalidateTerrainResult();
       recalculate();
     });
-  });
-
-  els.unitsToggle.addEventListener('change', (e) => {
-    state.units = e.target.checked ? 'imperial' : 'metric';
-    recalculate();
   });
 
   els.aircraftAltitude.addEventListener('input', function(e) {
@@ -760,28 +752,6 @@ function initMap() {
   }).setView([20, 0], 2);
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-  const LocateControl = L.Control.extend({
-    options: { position: 'bottomright' },
-    onAdd: function () {
-      const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control locate-control');
-      const btn = L.DomUtil.create('a', 'locate-btn', container);
-      btn.href = '#';
-      btn.title = 'Center on my location';
-      btn.setAttribute('role', 'button');
-      btn.setAttribute('aria-label', 'Center on my location');
-      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>`;
-
-      L.DomEvent.disableClickPropagation(container);
-      L.DomEvent.on(btn, 'click', function (e) {
-        L.DomEvent.preventDefault(e);
-        locateUser(btn);
-      });
-
-      return container;
-    }
-  });
-  new LocateControl().addTo(map);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -1092,11 +1062,13 @@ function initDesktopPanelToggle() {
   reopenBtn.addEventListener('click',   function() { setCollapsed(false); });
 }
 
-// ── Mobile locate ─────────────────────────────────────────────────────────────
+// ── Locate controls ───────────────────────────────────────────────────────────
 
-function initMobileLocate() {
-  const btn = document.getElementById('mobileLocateBtn');
-  btn.addEventListener('click', () => locateUser(btn));
+function initLocateButtons() {
+  var mobileBtn = document.getElementById('mobileLocateBtn');
+  var desktopBtn = document.getElementById('desktopLocateBtn');
+  if (mobileBtn) mobileBtn.addEventListener('click', function() { locateUser(mobileBtn); });
+  if (desktopBtn) desktopBtn.addEventListener('click', function() { locateUser(desktopBtn); });
 }
 
 // ── Ground station restore helper ─────────────────────────────────────────────
@@ -1170,6 +1142,47 @@ function showModal(title, bodyHtml, confirmLabel, onConfirm, isDanger) {
     document.removeEventListener('keydown', onKeyDown);
     overlay.removeEventListener('click', onOverlayClick);
   };
+}
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+
+function showSettingsModal() {
+  var unitsId = 'settingsUnitsToggle';
+  var body =
+    '<div class="settings-modal-content">' +
+      '<div class="settings-row">' +
+        '<div>' +
+          '<p class="settings-label">Units</p>' +
+          '<p class="settings-help">Switch distance readouts between metric and imperial.</p>' +
+        '</div>' +
+        '<div class="toggle">' +
+          '<input type="checkbox" id="' + unitsId + '" class="toggle-checkbox" ' + (state.units === 'imperial' ? 'checked' : '') + '>' +
+          '<label for="' + unitsId + '" class="toggle-label">' +
+            '<span class="metric">Metric</span>' +
+            '<span class="imperial">Imperial</span>' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
+      '<a class="settings-contact-link" href="mailto:palberico@yahoo.com">' +
+        '<span>Contact</span>' +
+        '<strong>palberico@yahoo.com</strong>' +
+      '</a>' +
+    '</div>';
+
+  showModal('Settings', body, 'Done', function() { return true; });
+
+  var unitsToggle = document.getElementById(unitsId);
+  if (unitsToggle) {
+    unitsToggle.addEventListener('change', function(e) {
+      state.units = e.target.checked ? 'imperial' : 'metric';
+      recalculate();
+    });
+  }
+}
+
+function initFooterActions() {
+  var settingsBtn = document.getElementById('settingsBtn');
+  if (settingsBtn) settingsBtn.addEventListener('click', showSettingsModal);
 }
 
 // ── Profiles ──────────────────────────────────────────────────────────────────
@@ -1523,7 +1536,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initMap();
   initFadeMarginTooltip();
   initPanelToggle();
-  initMobileLocate();
+  initLocateButtons();
+  initFooterActions();
 
   // Priority: defaults → last saved session → URL hash (highest)
   var savedState = loadLastState();

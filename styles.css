@@ -116,12 +116,6 @@ header {
   min-width: 0; /* allow flex child to shrink */
 }
 
-.units-bar {
-  padding: 10px 24px;
-  border-bottom: 1px solid var(--panel-border);
-  background: rgba(0, 0, 0, 0.15);
-}
-
 .header-actions {
   display: flex;
   align-items: center;
@@ -165,6 +159,19 @@ header {
   color: var(--text-main);
   background: rgba(255, 255, 255, 0.06);
   outline: none;
+}
+
+.desktop-locate-btn.locating {
+  color: var(--accent);
+  animation: spin 1s linear infinite;
+}
+
+.desktop-locate-btn.locate-success {
+  color: #34d399;
+}
+
+.desktop-locate-btn.locate-error {
+  color: #f87171;
 }
 
 /* Desktop panel collapse button */
@@ -723,6 +730,40 @@ footer {
   border-top: 1px solid var(--panel-border);
 }
 
+.footer-icon-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.footer-icon-btn {
+  min-width: 96px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.footer-icon-btn:hover,
+.footer-icon-btn:focus-visible {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+  outline: none;
+}
+
 .disclaimer {
   font-size: 11px;
   color: var(--text-muted);
@@ -1031,6 +1072,76 @@ footer {
   color: var(--text-main);
 }
 
+.settings-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-row > div:first-child {
+  min-width: 0;
+  flex: 1 1 170px;
+}
+
+.settings-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 3px;
+}
+
+.settings-help {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.settings-contact-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.04);
+  transition: var(--transition);
+}
+
+.settings-contact-link span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.settings-contact-link strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.settings-contact-link:hover,
+.settings-contact-link:focus-visible {
+  border-color: rgba(59, 130, 246, 0.55);
+  background: rgba(59, 130, 246, 0.1);
+  outline: none;
+}
+
 /* Share button — desktop panel header */
 .share-btn {
   flex-shrink: 0;
@@ -1167,50 +1278,6 @@ footer {
   100% { box-shadow: 0 0 0 0 rgba(255,255,255, 0); }
 }
 
-/* Locate Button */
-.locate-control {
-  margin-bottom: 0 !important;
-}
-
-.locate-btn {
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 34px !important;
-  height: 34px !important;
-  background: rgba(15, 23, 42, 0.85) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  color: #f8fafc !important;
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.locate-btn:hover {
-  background: rgba(30, 41, 59, 0.95) !important;
-  color: var(--accent) !important;
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
-}
-
-.locate-btn.locating {
-  color: var(--accent) !important;
-  animation: spin 1s linear infinite;
-}
-
-.locate-btn.locate-success {
-  color: #34d399 !important;
-  border-color: #34d399 !important;
-  box-shadow: 0 0 12px rgba(52, 211, 153, 0.4);
-}
-
-.locate-btn.locate-error {
-  color: #f87171 !important;
-  border-color: #f87171 !important;
-  box-shadow: 0 0 12px rgba(248, 113, 113, 0.4);
-}
-
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -1225,11 +1292,6 @@ footer {
 .leaflet-control-zoom-out,
 .leaflet-control-attribution {
   filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
-}
-
-/* Undo the invert for the locate button so it keeps intended colors */
-.locate-control {
-  filter: none !important;
 }
 
 /* Panel structure */
