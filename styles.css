@@ -1431,6 +1431,7 @@ footer {
   .mobile-action-bar {
     display: flex;
     border-top: 1px solid var(--panel-border);
+    border-bottom: 1px solid var(--panel-border);
   }
 
   .mobile-action-btn {
