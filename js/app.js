@@ -155,9 +155,14 @@ function initPanelToggle() {
   applyState(saved === 'collapsed');
 
   let didDrag = false;
+  let suppressNextClick = false;
 
   btn.addEventListener('click', () => {
-    if (didDrag) { didDrag = false; return; }
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      didDrag = false;
+      return;
+    }
     applyState(!panel.classList.contains('collapsed'));
   });
 
@@ -191,7 +196,11 @@ function initPanelToggle() {
     requestAnimationFrame(() => {
       panel.style.height = '';
       panel.style.transition = '';
-      if (!shouldHandleDrag) return;
+      if (!shouldHandleDrag) {
+        didDrag = false;
+        return;
+      }
+      suppressNextClick = true;
       if (delta > 50) {
         applyState(false);
       } else if (delta < -50) {

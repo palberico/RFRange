@@ -315,7 +315,10 @@ h2 {
   transition: margin-bottom 0.26s ease;
 }
 
-.controls-section.is-animating .section-body,
+.controls-section.is-animating .section-body {
+  overflow: hidden;
+}
+
 .controls-section.collapsed .section-body {
   max-height: 0;
   overflow: hidden;
