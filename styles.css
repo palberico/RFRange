@@ -305,14 +305,21 @@ h2 {
 }
 
 .section-body {
-  max-height: 800px;
+  max-height: var(--section-body-height, 0px);
   overflow: visible;
-  transition: max-height 0.3s ease;
+  opacity: 1;
+  transition: max-height 0.26s ease, opacity 0.18s ease;
 }
 
+.controls-section h2 {
+  transition: margin-bottom 0.26s ease;
+}
+
+.controls-section.is-animating .section-body,
 .controls-section.collapsed .section-body {
   max-height: 0;
   overflow: hidden;
+  opacity: 0;
 }
 
 .controls-section.collapsed h2 {

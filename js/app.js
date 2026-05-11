@@ -185,11 +185,13 @@ function initPanelToggle() {
     if (dragStartY === null) return;
     const delta = dragStartY - e.changedTouches[0].clientY;
     const wasCollapsed = panel.classList.contains('collapsed');
+    const shouldHandleDrag = didDrag && Math.abs(delta) > 5;
     dragStartY = null;
     dragStartHeight = null;
     requestAnimationFrame(() => {
       panel.style.height = '';
       panel.style.transition = '';
+      if (!shouldHandleDrag) return;
       if (delta > 50) {
         applyState(false);
       } else if (delta < -50) {
@@ -469,6 +471,7 @@ function populateCustomAntennaForm(formEl, customObj) {
 
 function syncCustomForm(selectEl, formEl) {
   formEl.classList.toggle('visible', selectEl.value === 'custom');
+  requestAnimationFrame(refreshOpenSectionHeights);
 }
 
 function syncAllCustomForms() {
@@ -1529,6 +1532,16 @@ function initDataActions() {
 
 // ── Collapsible sections ──────────────────────────────────────────────────────
 
+function setSectionBodyHeight(section) {
+  var body = section.querySelector('.section-body');
+  if (!body) return;
+  body.style.setProperty('--section-body-height', body.scrollHeight + 'px');
+}
+
+function refreshOpenSectionHeights() {
+  document.querySelectorAll('.controls-section[data-section]:not(.collapsed)').forEach(setSectionBodyHeight);
+}
+
 function initCollapsibleSections() {
   var saved;
   try {
@@ -1547,10 +1560,31 @@ function initCollapsibleSections() {
     var isCollapsed = saved[key] !== false;
     section.classList.toggle('collapsed', isCollapsed);
     btn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+    setSectionBodyHeight(section);
 
     btn.addEventListener('click', function() {
-      var nowCollapsed = section.classList.toggle('collapsed');
+      var body = section.querySelector('.section-body');
+      var nowCollapsed = !section.classList.contains('collapsed');
+
+      setSectionBodyHeight(section);
+      section.classList.add('is-animating');
+      section.classList.toggle('collapsed', nowCollapsed);
       btn.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
+
+      if (!nowCollapsed) {
+        requestAnimationFrame(function() {
+          setSectionBodyHeight(section);
+        });
+      }
+
+      if (body) {
+        body.addEventListener('transitionend', function onTransitionEnd(e) {
+          if (e.propertyName !== 'max-height') return;
+          body.removeEventListener('transitionend', onTransitionEnd);
+          section.classList.remove('is-animating');
+          if (!section.classList.contains('collapsed')) setSectionBodyHeight(section);
+        });
+      }
 
       var current;
       try {
@@ -1562,6 +1596,8 @@ function initCollapsibleSections() {
       localStorage.setItem(SECTION_STATE_KEY, JSON.stringify(current));
     });
   });
+
+  window.addEventListener('resize', refreshOpenSectionHeights);
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
