@@ -82,6 +82,31 @@ function initInfoTooltip(btn, tip) {
   });
 }
 
+function showIntroIfFirstVisit() {
+  if (hasSeenIntro()) return;
+
+  var body =
+    '<p class="intro-lead">A planning tool for FPV pilots. Predicts how far you can ' +
+    'realistically fly given your radio hardware and where you\'re flying — ' +
+    'accounting for terrain that blocks line-of-sight.</p>' +
+    '<ol class="intro-steps">' +
+    '<li><strong>Pick your gear</strong> in the Video Link and Control Link sections.</li>' +
+    '<li><strong>Click the map</strong> to set your ground station.</li>' +
+    '<li><strong>Click "Compute Terrain"</strong> to see where you can actually fly at your altitude.</li>' +
+    '</ol>' +
+    '<p class="intro-footer">Click <a href="about.html">About</a> in the footer for the full methodology.</p>';
+
+  showModal(
+    'Welcome to FPV Range Estimator',
+    body,
+    'Got it',
+    function() {
+      markIntroSeen();
+      return true;
+    }
+  );
+}
+
 function initFadeMarginTooltip() {
   const btn = els.fadeMarginInfoBtn;
   const tip = els.fadeMarginTooltip;
@@ -1550,6 +1575,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   recalculate();
   autoLocate();
+  showIntroIfFirstVisit();
 });
 
 function autoLocate() {

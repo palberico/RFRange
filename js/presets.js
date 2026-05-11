@@ -142,7 +142,8 @@ const videoAirAntennas = {
   stock_dipole: { name: "Stock Dipole · 2.0 dBi", gainDbi: 2.0 },
   axii_micro: { name: "Lumenier AXII Micro · 1.6 dBi", gainDbi: 1.6 },
   omni_lhcp: { name: "Omni LHCP · 3.5 dBi", gainDbi: 3.5 },
-  omni_highgain: { name: "Omni High-Gain · 5.0 dBi", gainDbi: 5.0 }
+  omni_highgain: { name: "Omni High-Gain · 5.0 dBi", gainDbi: 5.0 },
+  hglrc_hammer_lhcp: {name: "HGLRC Hammer LHCP · 2.5 dBi", gainDbi: 2.5 },
 };
 
 // Control air antennas (mounted on the aircraft)

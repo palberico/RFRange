@@ -9,6 +9,7 @@ var STORAGE_KEYS = {
   PROFILES:         'fpv_profiles',
   RECENT_LOCATIONS: 'fpv_recent_locations',
   PANEL_STATE:      'fpv_panel_state', // already used by initPanelToggle
+  HAS_SEEN_INTRO:   'fpv_has_seen_intro',
 };
 
 /**
@@ -74,5 +75,23 @@ function loadRecentLocations() {
   } catch (e) {
     console.warn('[fpv] could not load locations:', e);
     return [];
+  }
+}
+
+/** Returns true if the user has dismissed the intro modal. */
+function hasSeenIntro() {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.HAS_SEEN_INTRO) === 'true';
+  } catch (e) {
+    return true; // err on the side of not annoying users with the modal
+  }
+}
+
+/** Mark the intro as seen so it won't appear again. */
+function markIntroSeen() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.HAS_SEEN_INTRO, 'true');
+  } catch (e) {
+    console.warn('[fpv] could not save intro-seen flag:', e);
   }
 }

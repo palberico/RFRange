@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About — FPV Link Budget Estimator</title>
+  <meta name="description" content="How the FPV Link Budget Estimator works: RF math, terrain analysis, and limitations.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="about-page">
+  <header class="about-header">
+    <a href="index.html" class="back-link" aria-label="Back to app">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      <span>Back to app</span>
+    </a>
+    <h1>About FPV Link Budget Estimator</h1>
+    <!-- <p class="about-subtitle">How the math works and what to trust it for</p> -->
+  </header>
+
+  <main class="about-content">
+
+    <section>
+      <h2>What this is</h2>
+      <p>A planning tool for FPV drone pilots that estimates how far you can realistically fly given your radio hardware and where you're flying. It calculates theoretical RF range using the same math used in real-world link budgets, then refines that estimate by checking line-of-sight against actual terrain elevation data.</p>
+      <p>The output is a coverage polygon on the map showing where your aircraft can maintain a usable link at the configured altitude. Inside the polygon, you've got line-of-sight and adequate signal margin. Outside it, either the radio runs out of budget or terrain blocks the path.</p>
+    </section>
+
+    <section>
+      <h2>How to use it</h2>
+      <ol class="numbered-steps">
+        <li><strong>Pick your hardware.</strong> Select your video transmitter, control link, and antennas from the dropdowns. If your exact gear isn't listed, choose the closest match or use the "Custom…" option to enter specs manually.</li>
+        <li><strong>Drop a ground station pin.</strong> Click anywhere on the map to set where you'll be flying from. The free-space range circles render immediately.</li>
+        <li><strong>Click "Compute Terrain"</strong> to overlay the realistic coverage polygon. This samples elevation data along 18 bearings and finds where terrain breaks line-of-sight at your selected altitude.</li>
+      </ol>
+      <p>Adjust the fade margin, environment preset, or aircraft altitude to see how each affects your range. Save profiles for different builds. Share configurations as URLs so others see exactly what you planned.</p>
+    </section>
+
+    <section>
+      <h2>The RF math</h2>
+      <p>Range is calculated using the <strong>Friis transmission equation</strong> for free-space path loss, solved for the maximum distance at which the receiver still has adequate signal:</p>
+      <pre><code>FSPL_dB = 20·log₁₀(distance) + 20·log₁₀(frequency) − 147.55</code></pre>
+      <p>The maximum range is the distance at which received power equals receiver sensitivity plus a configurable fade margin:</p>
+      <pre><code>RX_Power = TX_Power + TX_Gain + RX_Gain − FSPL
+RX_Power ≥ RX_Sensitivity + Fade_Margin</code></pre>
+      <p>All values are in decibels. The fade margin is a safety buffer that accounts for real-world degradation the free-space model doesn't predict: multipath fading, antenna pointing imperfection, body blocking, atmospheric variation, and small-scale interference. The environment buttons set sensible defaults (7 dB for open desert, up to 25 dB for urban environments).</p>
+    </section>
+
+    <section>
+      <h2>Terrain analysis</h2>
+      <p>Free-space math gives you a theoretical maximum range circle. Real flying happens against terrain — ridges, hills, and obstacles block radio line-of-sight. When LOS is blocked, the link doesn't gracefully degrade; it dies.</p>
+      <p>The terrain analysis solves this in three steps:</p>
+      <ol>
+        <li><strong>Sample 18 bearings</strong> outward from the ground station every 20°. Along each bearing, request elevation data from the <a href="https://open-meteo.com/en/docs/elevation-api" target="_blank" rel="noopener">Open-Meteo Elevation API</a> at 10 logarithmically-spaced distances.</li>
+        <li><strong>Find each bearing's reach distance</strong> — the farthest point at which a straight line from the ground station antenna to the aircraft at the configured altitude clears all intervening terrain, plus Earth curvature drop (using the 4/3 effective Earth radius for radio propagation).</li>
+        <li><strong>Refine break-points</strong> with a second pass — when Pass 1 finds a block between two coarse samples, four refinement samples are added to pinpoint where LOS actually breaks.</li>
+      </ol>
+      <p>The reach distances on all 18 bearings are connected into a polygon — your coverage shape. Where the polygon meets the free-space circle, the radio is the limiting factor. Where it falls short, terrain is.</p>
+      <p>Earth curvature drop at distance <em>d</em> with the 4/3 effective radius is:</p>
+      <pre><code>drop = d² / (2 · 8,504,000)  meters</code></pre>
+    </section>
+
+    <section>
+      <h2>Limitations — what this tool can't do</h2>
+      <p>Read this before relying on the predictions for any flight where the outcome matters.</p>
+      <ul>
+        <li><strong>Free-space is a ceiling, not a guarantee.</strong> The math assumes ideal conditions with the fade margin you set. If your antennas are pointed badly, your goggle's gain is below spec, your battery sags under load, or your VTX runs hot and throttles, real range will be less than predicted.</li>
+        <li><strong>Sensitivity figures are educated guesses.</strong> ExpressLRS publishes official sensitivity numbers per packet rate; DJI and analog systems don't, so their values are back-calculated from advertised range claims. Treat the absolute numbers as approximate; trust the relative comparisons.</li>
+        <li><strong>Terrain data has limited resolution.</strong> Open-Meteo uses GLO-30 satellite elevation data — roughly 30 meter resolution. Small terrain features (single buildings, individual trees, narrow ravines) are not captured. Foliage and structures on top of the bare ground are not modeled at all.</li>
+        <li><strong>Antenna patterns are assumed omnidirectional.</strong> Real antennas have directional gain patterns — patches and Yagis especially. The tool doesn't account for this yet. If your ground antenna points east, your real coverage stretches east and contracts elsewhere in ways the polygon doesn't show.</li>
+        <li><strong>No interference modeling.</strong> WiFi noise in urban areas, other 2.4 GHz pilots flying nearby, microwave leakage — none of this is modeled. The environment buttons partially compensate with higher fade margin defaults, but they can't capture specific local conditions.</li>
+        <li><strong>The video and control links share a coverage polygon.</strong> Currently the polygon is computed against whichever link reaches farther (typically the control link). The shorter-range link (typically video) is RF-limited well inside the polygon, but the polygon shape itself only reflects terrain blockage of the farther link's frequency.</li>
+      </ul>
+      <p>Always fly with margin. Always maintain visual line of sight where regulations require it. Always assume the predicted range is optimistic.</p>
+    </section>
+
+    <section>
+      <h2>Credits and source</h2>
+      <ul>
+        <li>Map tiles: <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a> contributors</li>
+        <li>Map library: <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a></li>
+        <li>Elevation data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></li>
+        <li>Hardware specifications: manufacturer datasheets, ExpressLRS documentation, and community-validated figures from RC Groups, Oscar Liang, and r/fpv</li>
+        <li>Source code, including the full math implementation: <a href="https://github.com/palberico/RFRange" target="_blank" rel="noopener">github.com/palberico/RFRange</a></li>
+      </ul>
+      <p>This tool was built as a class project for Embry-Riddle Aeronautical University's Uncrewed Systems Networking course, and extended into a real flight-planning tool. It's open source under the repository's license — fork it, improve it, contribute hardware presets back.</p>
+    </section>
+
+  </main>
+
+  <footer class="about-footer">
+    <p>Open source · <a href="https://github.com/palberico/RFRange" target="_blank" rel="noopener">github.com/palberico/RFRange</a></p>
+  </footer>
+</body>
+</html>

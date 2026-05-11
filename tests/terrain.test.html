@@ -229,12 +229,13 @@
 
   // Obstacle right near origin (sample 1, 1000 m, elevation 500 m).
   // When checking sample 2 (5000 m, low terrain, aircraft at 160 m MSL),
-  // the ridge at 1000 m (500 m elevation) blocks the line → reach = dists[0] = 50 m.
+  // the ridge at 1000 m (500 m elevation) blocks the line.
+  // Per the contract used elsewhere: reach = dists[brokeIdx - 1] = dists[1] = 1000 m.
   (function() {
     var elevs = [100, 500, 100, 100, 100];
     var dists = [50, 1000, 5000, 20000, 50000];
     var r = findReachDistance(elevs, dists, 100, 1.5, 60, 915e6);
-    assert('near ridge → reach is first sample', r.reachM, 50);
+    assert('near ridge → reach is sample before ridge', r.reachM, 1000);
     assert('near ridge → broke at index 2', r.brokeAtSampleIdx, 2);
   })();
 
