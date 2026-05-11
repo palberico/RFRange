@@ -23,6 +23,9 @@ let videoCircle = null;
 let controlCircle = null;
 let groundMarker = null;
 
+const MAP_MAX_ZOOM = 16;
+const RANGE_OVERLAY_MAX_ZOOM = 13;
+
 // Cached range values written by recalculate(), read by runTerrainAnalysis()
 var currentVideoRangeM   = 0;
 var currentControlRangeM = 0;
@@ -746,17 +749,47 @@ function locateUser(btnEl) {
 
 // ── Map ───────────────────────────────────────────────────────────────────────
 
+function removeLayerIfShown(layer) {
+  if (layer && map && map.hasLayer(layer)) map.removeLayer(layer);
+}
+
+function addLayerIfHidden(layer) {
+  if (layer && map && !map.hasLayer(layer)) layer.addTo(map);
+}
+
+function hideRangeOverlays() {
+  removeLayerIfShown(videoCircle);
+  removeLayerIfShown(controlCircle);
+  removeLayerIfShown(coveragePolygon);
+}
+
+function syncRangeOverlayVisibility() {
+  if (!map) return;
+  if (map.getZoom() > RANGE_OVERLAY_MAX_ZOOM) {
+    hideRangeOverlays();
+    return;
+  }
+  addLayerIfHidden(controlCircle);
+  addLayerIfHidden(videoCircle);
+  addLayerIfHidden(coveragePolygon);
+}
+
 function initMap() {
   map = L.map('map', {
-    zoomControl: false
+    zoomControl: false,
+    preferCanvas: true,
+    maxZoom: MAP_MAX_ZOOM
   }).setView([20, 0], 2);
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
+    maxZoom: MAP_MAX_ZOOM,
     attribution: '© OpenStreetMap'
   }).addTo(map);
+
+  map.on('zoomstart', hideRangeOverlays);
+  map.on('zoomend', syncRangeOverlayVisibility);
 
   map.on('click', (e) => {
     state.groundStation = e.latlng;
@@ -810,6 +843,7 @@ function renderCoveragePolygon(polygonPoints) {
     fillOpacity: 0.15,
     interactive: false
   }).addTo(map);
+  syncRangeOverlayVisibility();
 }
 
 // In-memory cache keyed by "lat,lng,maxRange" — cleared on page reload
@@ -1028,6 +1062,7 @@ function recalculate() {
       color: '#06b6d4', weight: 2,
       fill: false
     }).addTo(map);
+    syncRangeOverlayVisibility();
   }
 
   updateHash();
