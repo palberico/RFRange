@@ -158,6 +158,7 @@ const controlAirAntennas = {
 const videoAntennas = {
   stock: { name: "Stock Goggle Dipole · 2.0 dBi", gainDbi: 2.0 },
   axii: { name: "Lumenier AXII · 1.6 dBi", gainDbi: 1.6 },
+  walksnail_patch_v2: { name: "Walksnail Patch Antenna V2 LHCP · 6.7 dBi", gainDbi: 6.7 },
   patch_8: { name: "Patch · 8.0 dBi", gainDbi: 8.0 },
   helical_11: { name: "Helical · 11.0 dBi", gainDbi: 11.0 },
   helical_13: { name: "Helical · 13.0 dBi", gainDbi: 13.0 }
