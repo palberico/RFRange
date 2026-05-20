@@ -158,7 +158,12 @@ const controlAirAntennas = {
 const videoAntennas = {
   stock: { name: "Stock Goggle Dipole · 2.0 dBi", gainDbi: 2.0 },
   axii: { name: "Lumenier AXII · 1.6 dBi", gainDbi: 1.6 },
-  walksnail_patch_v2: { name: "Walksnail Patch Antenna V2 LHCP · 6.7 dBi", gainDbi: 6.7 },
+  // TrueRC Singularity — low-profile 5.8 GHz stubby designed for HD goggle top ports
+  truerc_singularity: { name: "TrueRC Singularity · 1.9 dBi", gainDbi: 1.9 },
+  walksnail_patch_v2: { name: "Walksnail Patch V2 LHCP · 6.7 dBi", gainDbi: 6.7 },
+  // Walksnail Patch V2 (bottom) + TrueRC Singularity stubbies (top) with selection diversity.
+  // Effective gain ≈ patch gain + ~0.5 dB diversity boost; stubbies provide off-axis safety net.
+  walksnail_patch_v2_singularity_div: { name: "Walksnail Patch V2 + TrueRC Singularity (diversity) · 7.2 dBi", gainDbi: 7.2 },
   patch_8: { name: "Patch · 8.0 dBi", gainDbi: 8.0 },
   helical_11: { name: "Helical · 11.0 dBi", gainDbi: 11.0 },
   helical_13: { name: "Helical · 13.0 dBi", gainDbi: 13.0 }
